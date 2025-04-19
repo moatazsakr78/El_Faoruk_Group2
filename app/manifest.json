@@ -1,0 +1,31 @@
+{
+  "name": "El Farouk Cataloge",
+  "short_name": "El Farouk",
+  "description": "Browse through our wide range of products in this online catalog",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#55000F",
+  "theme_color": "#55000F",
+  "icons": [
+    {
+      "src": "/images/El Farouk10.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/El Farouk10.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/El Farouk10.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/El Farouk10.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+} 
