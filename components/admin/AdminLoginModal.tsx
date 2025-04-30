@@ -51,7 +51,7 @@ export default function AdminLoginModal({ isOpen, onClose }: AdminLoginModalProp
         
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-50 text-red-500 p-3 rounded-md text-sm">
+            <div className="bg-gray-50 text-[#470000] p-3 rounded-md text-sm">
               {error}
             </div>
           )}

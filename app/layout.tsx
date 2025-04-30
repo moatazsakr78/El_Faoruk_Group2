@@ -5,7 +5,7 @@ import Footer from '@/components/layout/Footer';
 import ClientInitProvider from '@/components/storage/ClientInitProvider';
 
 export const metadata: Metadata = {
-  title: 'سنتر هي و بس | كتالوج المنتجات',
+  title: 'El Farouk Group | كتالوج المنتجات',
   description: 'كتالوج شامل لجميع منتجاتنا المميزة بتصنيفات متعددة وتحديثات دورية',
 };
 

@@ -15,8 +15,8 @@ export default function Footer() {
           <div>
             <div className="mb-4">
               <Image
-                src="/images/hea.png"
-                alt="سنتر هي و بس"
+                src="/images/El Farouk10.png"
+                alt="El Farouk Group"
                 width={200}
                 height={70}
                 className="h-16 w-auto"
@@ -43,7 +43,7 @@ export default function Footer() {
         
         <div className="border-t border-gray-500 mt-12 pt-8">
           <p className="text-center text-gray-300">
-            &copy; {new Date().getFullYear()} سنتر هي و بس. جميع الحقوق محفوظة.
+            &copy; {new Date().getFullYear()} El Farouk Group. جميع الحقوق محفوظة.
           </p>
           <p className="text-center text-gray-300 mt-2">
             Developed by Moataz Sakr

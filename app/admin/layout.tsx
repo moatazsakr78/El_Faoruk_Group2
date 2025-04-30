@@ -85,9 +85,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <li className="px-6 py-2 mt-10">
               <button
                 onClick={handleLogout}
-                className="flex items-center space-x-3 rtl:space-x-reverse text-red-500 hover:text-red-600"
+                className="flex items-center space-x-3 rtl:space-x-reverse text-[#470000] hover:text-[#300000]"
               >
-                <FiLogOut className="h-5 w-5" />
+                <FiLogOut size={18} />
                 <span>تسجيل الخروج</span>
               </button>
             </li>
