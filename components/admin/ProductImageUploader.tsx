@@ -161,7 +161,7 @@ export default function ProductImageUploader({
             <button
               type="button"
               onClick={handleDeleteImage}
-              className="absolute top-2 right-2 bg-white text-[#470000] p-1 rounded-full shadow hover:bg-gray-100 transition"
+              className="absolute top-2 right-2 bg-white text-[#5D1F1F] p-1 rounded-full shadow hover:bg-gray-100 transition"
             >
               <FiTrash className="h-5 w-5" />
             </button>
@@ -228,7 +228,7 @@ export default function ProductImageUploader({
         
       {/* رسالة خطأ */}
       {error && (
-        <p className="mt-2 text-sm text-[#470000]">
+        <p className="mt-2 text-sm text-[#5D1F1F]">
           {error}
         </p>
       )}

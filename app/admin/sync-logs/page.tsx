@@ -105,7 +105,7 @@ export default function SyncLogsPage() {
                   </>
                 ) : (
                   <>
-                    <div className="w-3 h-3 rounded-full bg-[#470000] mr-2"></div>
+                    <div className="w-3 h-3 rounded-full bg-[#5D1F1F] mr-2"></div>
                     <span>غير متصل بالإنترنت</span>
                   </>
                 )}

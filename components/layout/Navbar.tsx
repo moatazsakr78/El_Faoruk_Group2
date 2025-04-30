@@ -17,7 +17,7 @@ export default function Navbar() {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-[#470000] shadow-md sticky top-0 z-50">
+    <nav className="bg-[#5D1F1F] shadow-md sticky top-0 z-50">
       <div className="container mx-auto px-4">
         <div className="flex justify-between h-16">
           <div className="flex items-center">

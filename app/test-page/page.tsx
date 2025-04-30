@@ -34,7 +34,7 @@ export default function TestPage() {
         <h2 className="text-xl font-bold mb-4">حالة التطبيق</h2>
         <div className="space-y-2">
           <p><strong>حالة التنفيذ:</strong> {isClient ? 'جانب العميل (المتصفح)' : 'جانب الخادم (SSR)'}</p>
-          <p><strong>حالة التخزين المحلي:</strong> <span className={storageStatus.includes('يعمل') ? 'text-green-600' : 'text-[#470000]'}>{storageStatus}</span></p>
+          <p><strong>حالة التخزين المحلي:</strong> <span className={storageStatus.includes('يعمل') ? 'text-green-600' : 'text-[#5D1F1F]'}>{storageStatus}</span></p>
         </div>
       </div>
       

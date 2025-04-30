@@ -820,7 +820,7 @@ export default function AdminProducts() {
     <div className="p-4 md:p-5 rtl">
       {notification && (
         <div className={`${
-          notification.type === 'error' ? 'bg-[#470000]/10 text-[#470000]' : 
+          notification.type === 'error' ? 'bg-[#5D1F1F]/10 text-[#5D1F1F]' : 
           notification.type === 'success' ? 'bg-green-100 text-green-700' : 
           notification.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
           'bg-blue-100 text-blue-700'
@@ -922,7 +922,7 @@ export default function AdminProducts() {
                   </button>
                   <button
                     onClick={() => handleDeleteProduct(product.id)}
-                    className="text-[#470000] hover:text-[#300000]"
+                    className="text-[#5D1F1F] hover:text-[#300000]"
                   >
                     <FiTrash2 />
                   </button>
@@ -976,7 +976,7 @@ export default function AdminProducts() {
               </button>
               <button
                 onClick={() => handleDeleteProduct(product.id)}
-                className="bg-[#470000] text-white px-4 py-2 rounded-md flex items-center text-sm"
+                className="bg-[#5D1F1F] text-white px-4 py-2 rounded-md flex items-center text-sm"
               >
                 <FiTrash2 className="ml-1" /> حذف
               </button>

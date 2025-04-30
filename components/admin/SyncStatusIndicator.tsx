@@ -79,7 +79,7 @@ export default function SyncStatusIndicator() {
     
     if (syncStatus.lastError) {
       return {
-        color: 'bg-[#470000]',
+        color: 'bg-[#5D1F1F]',
         text: 'فشل المزامنة',
         icon: <AlertCircle className="w-4 h-4 ml-1" />
       };
