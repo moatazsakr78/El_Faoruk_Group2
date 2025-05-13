@@ -1,12 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
+const dotenv = require('dotenv');
 
-// Load environment variables
-require('dotenv').config();
+// تحميل المتغيرات البيئية
+dotenv.config({ path: '.env.local' });
 
-// Supabase connection credentials
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jpwsohttsxsmyhasvudy.supabase.co';
+// إعدادات الاتصال
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://scbtgnknfahvxlcalfrk.supabase.co';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // Initialize the Supabase client with service role key to apply migrations

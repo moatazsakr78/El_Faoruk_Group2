@@ -6,8 +6,8 @@ import { getImageCacheHeaders, addVersionToImageUrl } from '@/lib/image-utils';
 // إنشاء عميل Supabase باستخدام service_role
 // هذا الكود يعمل على الخادم فقط، لذا فهو آمن لاستخدام مفتاح service_role
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jpwsohttsxsmyhasvudy.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impwd3NvaHR0c3hzbXloYXN2dWR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY0NDc0OTAsImV4cCI6MjA2MjAyMzQ5MH0.3smkZyO8z7B69lCEPebl3nI7WKHfkl2badoVYxvIgnw',
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://scbtgnknfahvxlcalfrk.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjYnRnbmtuZmFodnhsY2FsZnJrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzAwMDY4NiwiZXhwIjoyMDYyNTc2Njg2fQ.SJOutA0CisTdffLTDK5HcYY7vsCoDOZPsvdxGEQmUmg',
   {
     auth: {
       autoRefreshToken: false,

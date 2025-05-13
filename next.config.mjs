@@ -28,7 +28,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
-    domains: ['images.unsplash.com', 'via.placeholder.com', 'jpwsohttsxsmyhasvudy.supabase.co'],
+    domains: ['images.unsplash.com', 'via.placeholder.com', 'jpwsohttsxsmyhasvudy.supabase.co', 'scbtgnknfahvxlcalfrk.supabase.co'],
     remotePatterns: [
       {
         protocol: 'https',

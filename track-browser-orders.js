@@ -112,7 +112,7 @@ const browserCode = `
     console.log('🚀 بدء محاكاة إنشاء طلب...');
     
     // محاولة إنشاء طلب جديد
-    fetch('https://jpwsohttsxsmyhasvudy.supabase.co/rest/v1/orders', {
+    fetch('https://scbtgnknfahvxlcalfrk.supabase.co/rest/v1/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -134,7 +134,7 @@ const browserCode = `
         console.log('✅ تم إنشاء الطلب بنجاح:', orderId);
         
         // إضافة عناصر الطلب
-        return fetch('https://jpwsohttsxsmyhasvudy.supabase.co/rest/v1/order_items', {
+        return fetch('https://scbtgnknfahvxlcalfrk.supabase.co/rest/v1/order_items', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -210,4 +210,44 @@ function main() {
 }
 
 // تنفيذ البرنامج
-main(); 
+main();
+
+// إنشاء طلب جديد في قاعدة البيانات
+async function createOrder(orderData) {
+  try {
+    // إرسال الطلب إلى API
+    const response = await fetch('https://scbtgnknfahvxlcalfrk.supabase.co/rest/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjYnRnbmtuZmFodnhsY2FsZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwMDA2ODYsImV4cCI6MjA2MjU3NjY4Nn0.47A0DCKjvPmkKECE0NFttvPFceyug98zIiufOVRjfPQ',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(orderData)
+    });
+
+    // ... existing code ...
+  } catch (error) {
+    // ... existing code ...
+  }
+}
+
+// إنشاء عناصر الطلب في قاعدة البيانات
+async function createOrderItems(items) {
+  try {
+    // إرسال الطلب إلى API
+    return fetch('https://scbtgnknfahvxlcalfrk.supabase.co/rest/v1/order_items', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjYnRnbmtuZmFodnhsY2FsZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwMDA2ODYsImV4cCI6MjA2MjU3NjY4Nn0.47A0DCKjvPmkKECE0NFttvPFceyug98zIiufOVRjfPQ',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(items)
+    });
+
+    // ... existing code ...
+  } catch (error) {
+    // ... existing code ...
+  }
+} 

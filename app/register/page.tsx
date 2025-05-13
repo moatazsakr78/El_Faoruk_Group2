@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/auth'; // استيراد عميل supabase لتسجيل الدخول
+import { supabase, signUp } from '@/lib/auth'; // استيراد عميل supabase وفنكشن التسجيل
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -18,16 +18,21 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // تنظيف البريد الإلكتروني من المسافات
+    const cleanEmail = email.trim();
+    
     // التحقق من تطابق كلمات المرور
     if (password !== confirmPassword) {
       setError('كلمات المرور غير متطابقة');
       return;
     }
     
-    // التحقق من صحة البريد الإلكتروني
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email)) {
-      setError('يرجى إدخال بريد إلكتروني صحيح');
+    // التحقق من صحة البريد الإلكتروني - استخدام نمط أكثر تساهلاً
+    // const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // تحقق مبسط للبريد الإلكتروني - فقط التأكد من وجود @ ونقطة
+    const emailPattern = /^.+@.+\..+$/;
+    if (!emailPattern.test(cleanEmail)) {
+      setError('يرجى إدخال بريد إلكتروني صحيح يحتوي على @ ونطاق مثل example@domain.com');
       return;
     }
     
@@ -53,32 +58,31 @@ export default function Register() {
     
     try {
       console.log('Attempting to sign up with:', {
-        email,
+        email: cleanEmail,
         username,
         passwordLength: password.length
       });
 
-      // استخدام الدالة الطرفية الجديدة بدلاً من وظيفة signUp
-      const response = await fetch('https://jpwsohttsxsmyhasvudy.supabase.co/functions/v1/register-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          username,
-        }),
-      });
-
-      const result = await response.json();
+      // استخدام دالة signUp مباشرة من lib/auth
+      const { data, error: signUpError } = await signUp(cleanEmail, password, username);
       
-      console.log('Registration result:', result);
+      console.log('Registration result:', { success: !!data, error: signUpError });
       
-      if (!response.ok) {
+      if (signUpError) {
         // فشل التسجيل
-        setError(result.error || 'حدث خطأ أثناء التسجيل');
+        console.error('Signup error details:', signUpError);
+        
+        // معالجة أنواع الأخطاء الشائعة
+        if (signUpError.message?.includes('already exists')) {
+          setError('البريد الإلكتروني مستخدم بالفعل. يرجى استخدام بريد إلكتروني آخر أو تسجيل الدخول.');
+        } else if (signUpError.message?.includes('email')) {
+          setError('البريد الإلكتروني غير صالح. يرجى التحقق من صحة البريد الإلكتروني.');
+        } else if (signUpError.message?.includes('username')) {
+          setError('اسم المستخدم مستخدم بالفعل، يرجى اختيار اسم آخر');
+        } else {
+          setError(signUpError.message || 'حدث خطأ أثناء التسجيل');
+        }
+        setLoading(false);
         return;
       }
       
@@ -87,7 +91,7 @@ export default function Register() {
       
       // استخدام signInWithPassword لتسجيل الدخول مباشرة
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+        email: cleanEmail,
         password
       });
 
@@ -130,15 +134,31 @@ export default function Register() {
         )}
         
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            {error}
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 relative">
+            <div className="flex justify-between items-start">
+              <div>{error}</div>
+              <button 
+                onClick={() => setError(null)}
+                className="text-red-700 font-bold"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-2 text-center">
+              <button 
+                onClick={() => setError(null)}
+                className="text-sm text-blue-600 underline"
+              >
+                محاولة مرة أخرى
+              </button>
+            </div>
           </div>
         )}
         
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
-              اسم المستخدم
+              اسم المستخدم <span className="text-red-500">*</span>
             </label>
             <input
               id="username"
@@ -152,7 +172,7 @@ export default function Register() {
           
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
-              البريد الإلكتروني
+              البريد الإلكتروني <span className="text-red-500">*</span>
             </label>
             <input
               id="email"
@@ -166,7 +186,7 @@ export default function Register() {
           
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
-              كلمة المرور
+              كلمة المرور <span className="text-red-500">*</span>
             </label>
             <input
               id="password"
@@ -180,7 +200,7 @@ export default function Register() {
           
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirmPassword">
-              تأكيد كلمة المرور
+              تأكيد كلمة المرور <span className="text-red-500">*</span>
             </label>
             <input
               id="confirmPassword"

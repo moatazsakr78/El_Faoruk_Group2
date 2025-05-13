@@ -1,4 +1,3 @@
-
 // تتبع طلبات Supabase وتسجيل النتائج
 (function() {
   console.log('بدء تتبع طلبات إنشاء الطلبات في Supabase...');
@@ -107,7 +106,7 @@
     console.log('🚀 بدء محاكاة إنشاء طلب...');
     
     // محاولة إنشاء طلب جديد
-    fetch('https://jpwsohttsxsmyhasvudy.supabase.co/rest/v1/orders', {
+    fetch('https://scbtgnknfahvxlcalfrk.supabase.co/rest/v1/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -129,7 +128,7 @@
         console.log('✅ تم إنشاء الطلب بنجاح:', orderId);
         
         // إضافة عناصر الطلب
-        return fetch('https://jpwsohttsxsmyhasvudy.supabase.co/rest/v1/order_items', {
+        return fetch('https://scbtgnknfahvxlcalfrk.supabase.co/rest/v1/order_items', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

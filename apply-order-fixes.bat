@@ -11,7 +11,7 @@ if exist .env (
 
 rem التحقق من المتغيرات المطلوبة
 if "%SUPABASE_URL%"=="" (
-    set SUPABASE_URL=https://jpwsohttsxsmyhasvudy.supabase.co
+    set SUPABASE_URL=https://scbtgnknfahvxlcalfrk.supabase.co
     echo تم تعيين عنوان Supabase افتراضياً: %SUPABASE_URL%
 )
 
@@ -56,4 +56,22 @@ echo قم باختبار التطبيق للتأكد من نجاح التغيي�
 echo.
 echo ملاحظة هامة: يجب أن تكون متصلاً بالإنترنت وأن يكون لديك صلاحيات كافية 
 echo على قاعدة البيانات لتنفيذ هذه التغييرات.
-echo. 
+echo.
+
+REM تعيين متغيرات البيئة
+echo تعيين متغيرات البيئة...
+set NODE_ENV=development
+set NEXT_PUBLIC_SITE_NAME=El_Farouk_Group
+
+REM تعيين معلومات Supabase
+echo تعيين معلومات Supabase...
+set NEXT_PUBLIC_SUPABASE_URL=https://scbtgnknfahvxlcalfrk.supabase.co
+set NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjYnRnbmtuZmFodnhsY2FsZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwMDA2ODYsImV4cCI6MjA2MjU3NjY4Nn0.47A0DCKjvPmkKECE0NFttvPFceyug98zIiufOVRjfPQ
+
+REM تنفيذ سكريبت الإصلاح
+echo تنفيذ سكريبت إصلاح الطلبات...
+node supabase-order-helper.js
+
+echo.
+echo ===== تم الانتهاء من تطبيق الإصلاحات =====
+pause 

@@ -32,7 +32,7 @@ export function addVersionToImageUrl(url: string, version?: string | number): st
 export function getOptimizedImageUrl(
   bucketName: string,
   filePath: string,
-  supabaseUrl: string = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jpwsohttsxsmyhasvudy.supabase.co'
+  supabaseUrl: string = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://scbtgnknfahvxlcalfrk.supabase.co'
 ): string {
   if (!bucketName || !filePath) {
     console.warn('getOptimizedImageUrl: bucketName and filePath are required');
