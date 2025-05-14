@@ -49,6 +49,7 @@ export async function getProductById(id: string): Promise<{
       productCode: product.product_code || '',
       boxQuantity: product.box_quantity || 1,
       piecePrice: product.piece_price || 0,
+      wholesalePrice: product.wholesale_price || 0,
       packPrice: product.pack_price || 0,
       boxPrice: product.box_price || 0,
       imageUrl: product.image_url || '',

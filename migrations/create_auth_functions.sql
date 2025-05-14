@@ -44,6 +44,7 @@ BEGIN
     'governorate', u.governorate,
     'avatar_url', u.avatar_url,
     'is_admin', u.is_admin,
+    'role', COALESCE(u.role, 'customer'),
     'created_at', u.created_at,
     'updated_at', u.updated_at
   ) INTO user_data

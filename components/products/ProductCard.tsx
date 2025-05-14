@@ -3,6 +3,7 @@ import { Product } from '@/types';
 import { useState, useEffect, useRef } from 'react';
 import { FiPlus, FiMinus, FiEdit } from 'react-icons/fi';
 import { useCart } from '@/components/CartProvider';
+import { useAuth } from '@/components/AuthProvider';
 
 interface ProductCardProps {
   product: Product;
@@ -26,6 +27,18 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   const decrementIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const { orderMode, addItem, isInCart, getItem } = useCart();
+  const { profile, isAdmin } = useAuth(); // استخدام سياق المصادقة للحصول على معلومات المستخدم
+  
+  // الحصول على صلاحية المستخدم (مع قيمة افتراضية 'customer')
+  const userRole = profile?.role || 'customer';
+  
+  // طباعة معلومات المستخدم للتصحيح بشكل مفصل
+  useEffect(() => {
+    console.log('ProductCard - User profile:', profile);
+    console.log('ProductCard - User role:', userRole);
+    console.log('ProductCard - Is admin:', isAdmin);
+    console.log('ProductCard - Product:', product.name, 'Code:', product.productCode);
+  }, [profile, userRole, isAdmin, product]);
   
   // Reset UI states when order mode changes
   useEffect(() => {
@@ -194,6 +207,44 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
 
   const isProductInCart = isInCart(product.id);
 
+  // منطق عرض الأسعار بناءً على الصلاحيات
+  let showPiecePrice = false;
+  let showWholesalePrice = false;
+
+  // طباعة معلومات الصلاحيات للتصحيح بشكل مفصل
+  console.log(`Product ${product.productCode} - Role: ${userRole}, isAdmin: ${isAdmin}, Profile:`, profile);
+
+  // تحسين منطق عرض الأسعار - استخدام تنفيذ أكثر مباشرة لمنع أي مشاكل
+  if (isAdmin === true) {
+    // المشرفون يرون جميع الأسعار
+    showPiecePrice = true;
+    showWholesalePrice = true;
+    console.log(`Admin user (is_admin=true) - showing both prices for product ${product.productCode}`);
+  } else {
+    // التعامل مع الصلاحيات المختلفة
+    const role = userRole ? userRole.toLowerCase() : 'customer';
+    
+    // استخدام منطق مباشر بدلاً من switch-case لتجنب أي مشاكل
+    if (role === 'wholesale') {
+      showPiecePrice = false;
+      showWholesalePrice = true;
+      console.log(`Wholesale user - showing only wholesale price for product ${product.productCode}`);
+    } else if (role === 'preparation') {
+      showPiecePrice = false;
+      showWholesalePrice = false;
+      console.log(`Preparation user - hiding all prices for product ${product.productCode}`);
+    } else if (role === 'full_details' || role === 'admin') {
+      showPiecePrice = true;
+      showWholesalePrice = true;
+      console.log(`${role} user - showing both prices for product ${product.productCode}`);
+    } else {
+      // الحالة الافتراضية (customer أو أي قيمة أخرى) - سعر القطعة فقط
+      showPiecePrice = true;
+      showWholesalePrice = false;
+      console.log(`Default case (role=${role}) - showing only piece price for product ${product.productCode}`);
+    }
+  }
+
   return (
     <div className="bg-[#D7D7D7] rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
       <div className="relative h-64 md:h-72">
@@ -239,10 +290,22 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
         
         <div className="space-y-2">
           <div className="grid grid-cols-1 gap-2 text-sm">
-            <div className="bg-gray-50 p-2 rounded text-center">
-              <p className="font-bold text-primary">سعر القطعة</p>
-              <p className="text-lg">{product.piecePrice} جنيه</p>
-            </div>
+            {/* عرض سعر القطعة */}
+            {showPiecePrice && (
+              <div className="bg-gray-50 p-2 rounded text-center">
+                <p className="font-bold text-primary">سعر القطعة</p>
+                <p className="text-lg">{product.piecePrice} جنيه</p>
+              </div>
+            )}
+            
+            {/* عرض سعر الجملة */}
+            {showWholesalePrice && product.wholesalePrice && (
+              <div className="bg-gray-50 p-2 rounded text-center">
+                <p className="font-bold text-secondary">سعر الجملة</p>
+                <p className="text-lg">{product.wholesalePrice} جنيه</p>
+              </div>
+            )}
+            
             <div className="bg-gray-50 p-2 rounded text-center">
               <p className="font-semibold">الكمية في الكرتونة</p>
               <p className="text-lg">{product.boxQuantity} قطعة</p>

@@ -39,6 +39,7 @@ interface Product {
   productCode: string;
   boxQuantity: number;
   piecePrice: number;
+  wholesalePrice?: number; // سعر الجملة
   imageUrl: string;
   isNew: boolean;
   createdAt: string;
@@ -60,6 +61,7 @@ export default function AdminProducts() {
     productCode: '',
     boxQuantity: '',
     piecePrice: '',
+    wholesalePrice: '',
     imageUrl: '',
     isNew: false,
   });
@@ -371,6 +373,7 @@ export default function AdminProducts() {
         product_code: product.productCode,
         box_quantity: product.boxQuantity,
         piece_price: product.piecePrice,
+        wholesale_price: product.wholesalePrice,
         image_url: imageUrl, // استخدام القيمة المعالجة
         is_new: product.isNew,
         created_at: product.createdAt || currentDate,
@@ -499,6 +502,7 @@ export default function AdminProducts() {
       productCode: '',
       boxQuantity: '',
       piecePrice: '',
+      wholesalePrice: '',
       imageUrl: '',
       isNew: false,
     });
@@ -512,6 +516,7 @@ export default function AdminProducts() {
       productCode: product.productCode,
       boxQuantity: product.boxQuantity.toString(),
       piecePrice: product.piecePrice.toString(),
+      wholesalePrice: product.wholesalePrice?.toString() || '',
       imageUrl: product.imageUrl,
       isNew: product.isNew,
     });
@@ -881,6 +886,9 @@ export default function AdminProducts() {
                 سعر القطعة
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                سعر الجملة
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 الإجراءات
               </th>
             </tr>
@@ -912,6 +920,9 @@ export default function AdminProducts() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {product.piecePrice} جنيه
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {product.wholesalePrice ? `${product.wholesalePrice} جنيه` : '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <button
@@ -961,6 +972,9 @@ export default function AdminProducts() {
             <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
               <div className="bg-gray-50 p-2 rounded">
                 <span className="font-bold">سعر القطعة:</span> {product.piecePrice} جنيه
+              </div>
+              <div className="bg-gray-50 p-2 rounded">
+                <span className="font-bold">سعر الجملة:</span> {product.wholesalePrice ? `${product.wholesalePrice} جنيه` : '-'}
               </div>
               <div className="bg-gray-50 p-2 rounded">
                 <span className="font-bold">الكمية:</span> {product.boxQuantity} قطعة
@@ -1077,7 +1091,7 @@ export default function AdminProducts() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label
                     htmlFor="piecePrice"
@@ -1096,6 +1110,25 @@ export default function AdminProducts() {
                     min="0"
                     className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     required
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="wholesalePrice"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    سعر الجملة
+                  </label>
+                  <input
+                    type="number"
+                    id="wholesalePrice"
+                    value={formData.wholesalePrice}
+                    onChange={(e) =>
+                      setFormData({ ...formData, wholesalePrice: e.target.value })
+                    }
+                    step="0.01"
+                    min="0"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                 </div>
               </div>

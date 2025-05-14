@@ -234,6 +234,17 @@ export default function ProductPage() {
                   </div>
                 </div>
               </div>
+              
+              {product.wholesalePrice && (
+                <div className="bg-secondary bg-opacity-10 p-4 rounded-lg">
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="text-center">
+                      <h3 className="text-lg font-bold text-secondary mb-2">سعر الجملة</h3>
+                      <p className="text-3xl font-bold">{product.wholesalePrice} جنيه</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="mt-auto">

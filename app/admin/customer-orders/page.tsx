@@ -83,6 +83,7 @@ export default function CustomerOrdersPage() {
   const [countInterval, setCountInterval] = useState<NodeJS.Timeout | null>(null);
   const [countSpeed, setCountSpeed] = useState<number>(150);
   const [editedNotes, setEditedNotes] = useState<{ [orderId: string]: string }>({});
+  const [loadingOrder, setLoadingOrder] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -802,79 +803,113 @@ export default function CustomerOrdersPage() {
     }
   };
 
-  // وظيفة بدء تحضير الطلب
-  const handleStartPreparation = (orderId: string, username: string) => {
+  // Function to navigate directly to preparation page
+  const navigateToPreparation = (orderId: string) => {
     if (confirm('هل أنت متأكد أنك تريد الانتقال لوضع التحضير؟')) {
-      // تحديث حالة الطلب لمنع التعديل أو الحذف من قبل المستخدم
-      updateOrderPreparationStatus(orderId, true);
-      
-      // الانتقال إلى صفحة تحضير الطلب
-      router.push(`/admin/prepare-order/${orderId}`);
+      try {
+        // Set loading state
+        setLoadingOrder(orderId);
+        
+        // Navigate directly to the preparation page using window.location for immediate navigation
+        console.log(`Navigating directly to prepare-order/${orderId}`);
+        
+        // Use absolute URL to ensure clean navigation
+        const baseUrl = window.location.origin;
+        window.location.href = `${baseUrl}/admin/prepare-order/${orderId}`;
+      } catch (error) {
+        console.error('Navigation error:', error);
+        setLoadingOrder(null);
+      }
     }
   };
 
-  // تحديث حالة تحضير الطلب في قاعدة البيانات
-  const updateOrderPreparationStatus = async (orderId: string, inPreparation: boolean) => {
-    try {
-      // تحديث حالة الطلب في قاعدة البيانات
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          in_preparation: inPreparation,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-      
-      if (error) {
-        console.error('Error updating order preparation status:', error);
-        alert('حدث خطأ أثناء تحديث حالة الطلب');
-        return false;
-      }
-      
-      // تحديث الحالة المحلية
-      setOrders(prevOrders => {
-        return prevOrders.map(order => {
-          if (order.id === orderId) {
-            return { ...order, in_preparation: inPreparation };
-          }
-          return order;
+  const handleStartPreparation = async (orderId: string, username: string) => {
+    if (confirm('هل أنت متأكد أنك تريد الانتقال لوضع التحضير؟')) {
+      try {
+        // Set loading state to prevent multiple clicks
+        setLoadingOrder(orderId);
+        console.log(`Starting preparation for order ${orderId}`);
+        
+        // Update order status in database
+        const { error } = await supabase
+          .from('orders')
+          .update({ 
+            in_preparation: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', orderId);
+        
+        if (error) {
+          console.error('Error updating order preparation status:', error);
+          alert('حدث خطأ أثناء تحديث حالة الطلب');
+          setLoadingOrder(null);
+          return;
+        }
+        
+        console.log(`Successfully updated order ${orderId} preparation status`);
+        
+        // Update local state
+        setOrders(prevOrders => {
+          return prevOrders.map(order => {
+            if (order.id === orderId) {
+              return { ...order, in_preparation: true };
+            }
+            return order;
+          });
         });
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('Error updating order preparation status:', error);
-      alert('حدث خطأ غير متوقع أثناء تحديث حالة الطلب');
-      return false;
+        
+        // Add a longer delay to ensure database update completes
+        setTimeout(() => {
+          console.log(`Navigating to prepare-order/${orderId}`);
+          router.push(`/admin/prepare-order/${orderId}`);
+        }, 500);
+        
+      } catch (error) {
+        console.error('Error starting preparation:', error);
+        alert('حدث خطأ أثناء بدء التحضير. يرجى المحاولة مرة أخرى.');
+        setLoadingOrder(null);
+      }
     }
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-xl">جاري تحميل الطلبات...</div>
+      <div className="flex flex-col min-h-screen">
+        <div className="flex-grow">
+          <div className="flex justify-center items-center h-64">
+            <div className="text-xl">جاري تحميل الطلبات...</div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-        <p>{error}</p>
-        <Button onClick={loadOrders} className="mt-2">إعادة المحاولة</Button>
+      <div className="flex flex-col min-h-screen">
+        <div className="flex-grow">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <p>{error}</p>
+            <Button onClick={loadOrders} className="mt-2">إعادة المحاولة</Button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (orders.length === 0) {
     return (
-      <div className="text-center p-8">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-xl mb-2">لا توجد طلبات</div>
-            <p className="text-gray-500 mb-4">لم يقم العملاء بإجراء أي طلبات بعد</p>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col min-h-screen">
+        <div className="flex-grow">
+          <div className="text-center p-8">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-xl mb-2">لا توجد طلبات</div>
+                <p className="text-gray-500 mb-4">لم يقم العملاء بإجراء أي طلبات بعد</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -883,7 +918,7 @@ export default function CustomerOrdersPage() {
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">طلبات العملاء</h1>
       
-      <div className="space-y-6">
+      <div className="space-y-6 mb-8">
         {orders.map(order => (
           <Card key={order.id} className={`overflow-hidden transition-all ${order.allItemsPrepared ? 'border-green-500' : ''} ${orderInEditMode === order.id ? 'ring-2 ring-blue-400' : ''}`}>
             <CardHeader 
@@ -1175,10 +1210,24 @@ export default function CustomerOrdersPage() {
                           variant="outline" 
                           size="sm" 
                           className="bg-[#5D1F1F] text-white hover:bg-[#4a1919] transition-colors"
-                          onClick={() => handleStartPreparation(order.id, getUserDisplayName(order))}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigateToPreparation(order.id);
+                          }}
+                          disabled={loadingOrder === order.id}
+                          type="button"
                         >
-                          <FiPackage className="ml-1" />
-                          بدء التحضير
+                          {loadingOrder === order.id ? (
+                            <>
+                              <span className="animate-spin h-4 w-4 mr-2 border-2 border-white rounded-full border-t-transparent"></span>
+                              جاري التحضير...
+                            </>
+                          ) : (
+                            <>
+                              <FiPackage className="ml-1" />
+                              بدء التحضير
+                            </>
+                          )}
                         </Button>
                       </div>
                       

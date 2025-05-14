@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { loadData, saveData } from '@/lib/localStorage';
+import { ensureRoleColumnExists } from '@/lib/db-setup';
 
 /**
  * مكون لتهيئة وضمان استمرارية بيانات التخزين المحلي
@@ -26,36 +27,36 @@ export default function InitLocalStorage() {
       await syncLocalStorage('categories');
       await syncLocalStorage('productSettings');
       
-      console.log('Local storage initialization complete');
-    };
-    
-    // دالة مساعدة لمزامنة مفتاح معين بين التخزين الدائم و localStorage العادي
-    const syncLocalStorage = async (key: string) => {
+      // التحقق من وجود عمود role في جدول المستخدمين وإضافته إذا لزم الأمر
       try {
-        // محاولة تحميل البيانات من التخزين الدائم
-        const persistentData = await loadData(key);
-        
-        if (persistentData) {
-          // إذا وجدت البيانات في التخزين الدائم، نقوم بتحميلها في localStorage العادي
-          localStorage.setItem(key, JSON.stringify(persistentData));
-          console.log(`Restored ${key} from persistent storage`);
-        } else {
-          // إذا لم توجد البيانات في التخزين الدائم، نحاول تحميلها من localStorage العادي
-          const localData = localStorage.getItem(key);
-          if (localData) {
-            // إذا وجدت في localStorage، نحفظها في التخزين الدائم
-            saveData(key, JSON.parse(localData));
-            console.log(`Saved ${key} to persistent storage from localStorage`);
-          }
-        }
+        await ensureRoleColumnExists();
       } catch (error) {
-        console.error(`Error syncing ${key}:`, error);
+        console.error('خطأ أثناء التحقق من عمود role:', error);
       }
+      
+      console.log('Local storage initialization complete');
     };
 
     initializeStorage();
-  }, [isClient]); // تعتمد على isClient
+  }, [isClient]);
 
-  // هذا المكون لا يعرض أي محتوى مرئي
+  /**
+   * مزامنة بيانات التخزين المحلي من/إلى التخزين الدائم
+   */
+  async function syncLocalStorage(key: string) {
+    try {
+      // استرجاع البيانات من التخزين الدائم
+      const data = await loadData(key);
+      
+      if (data) {
+        // تخزين البيانات المسترجعة في localStorage
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    } catch (error) {
+      console.error(`Error syncing localStorage for key ${key}:`, error);
+    }
+  }
+
+  // هذا المكون لا يقوم بعرض أي شيء في واجهة المستخدم
   return null;
 } 

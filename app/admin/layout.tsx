@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { FiPackage, FiLogOut, FiMenu, FiX, FiShoppingCart, FiMessageCircle, FiList, FiBook } from 'react-icons/fi';
+import { FiPackage, FiLogOut, FiMenu, FiX, FiShoppingCart, FiMessageCircle, FiList, FiBook, FiUsers } from 'react-icons/fi';
 import { hasData, removeData, saveData } from '@/lib/localStorage';
 
 // تعريف مفتاح موحد للمصادقة
@@ -39,6 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'طلبات العملاء', href: '/admin/customer-orders', icon: FiShoppingCart },
     { name: 'سجل العملاء', href: '/admin/customer-history', icon: FiBook },
     { name: 'المحادثات', href: '/admin/chat', icon: FiMessageCircle },
+    { name: 'الصلاحيات', href: '/admin/permissions', icon: FiUsers },
   ];
 
   // وظيفة التنقل المباشر باستخدام window.location

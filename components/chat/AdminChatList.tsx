@@ -153,25 +153,13 @@ export default function AdminChatList({ isStandalonePage = false }: AdminChatLis
     reloadConversations();
   };
   
-  // منطق إظهار/إخفاء الـ scrollbar
+  // منطق إظهار/إخفاء الـ scrollbar - تم إزالته لإظهار الـ scrollbar بشكل دائم
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const showScrollbar = () => {
-      container.classList.add('show-scrollbar');
-      if (hideTimeout) clearTimeout(hideTimeout);
-      hideTimeout = setTimeout(() => {
-        container.classList.remove('show-scrollbar');
-      }, 2000);
-    };
-
-    container.addEventListener('scroll', showScrollbar);
-    container.addEventListener('mouseenter', showScrollbar);
-
+    // لا نحتاج إلى إخفاء الـ scrollbar بعد الآن
     return () => {
-      container.removeEventListener('scroll', showScrollbar);
-      container.removeEventListener('mouseenter', showScrollbar);
       if (hideTimeout) clearTimeout(hideTimeout);
     };
   }, []);
@@ -233,31 +221,29 @@ export default function AdminChatList({ isStandalonePage = false }: AdminChatLis
   // تخصيص النمط للوضع المستقل
   const containerStyle = isStandalone 
     ? { 
-        height: '100vh', 
+        height: 'calc(100vh - 80px)', // زيادة الارتفاع لملء المساحة المتاحة
         width: '100%', 
         margin: '0', 
         borderRadius: '0', 
         boxShadow: 'none',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 9999
+        position: 'relative',
+        zIndex: 999
       } 
     : { 
         height: '700px', 
         width: '1200px', 
-        margin: '40px auto', 
-        borderRadius: '12px', 
-        boxShadow: '0 2px 16px #0001' 
+        maxWidth: '100%',
+        margin: '0 auto',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
       };
   
   return (
     <div 
       ref={containerRef} 
-      className="flex bg-white overflow-hidden main-admin-chat-container custom-admin-chat-box" 
-      style={{...containerStyle, overflowY: 'auto'}}
+      className="flex bg-white h-full w-full overflow-hidden main-admin-chat-container custom-admin-chat-box" 
+      style={containerStyle}
     >
       {/* قائمة المحادثات */}
       <div className={`w-full md:w-80 border-l flex flex-col ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>

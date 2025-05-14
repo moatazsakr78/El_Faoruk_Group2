@@ -4,6 +4,7 @@ export interface Product {
   productCode: string;
   boxQuantity: number;
   piecePrice: number;
+  wholesalePrice?: number;
   packPrice: number;
   boxPrice: number;
   imageUrl: string;

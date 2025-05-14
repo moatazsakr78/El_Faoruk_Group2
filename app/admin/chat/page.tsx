@@ -23,25 +23,17 @@ export default function AdminChatPage() {
     const mainContent = document.querySelector('.flex-1.overflow-auto');
     if (mainContent instanceof HTMLElement) {
       mainContent.style.padding = '0';
-      mainContent.style.overflow = 'hidden';
+      mainContent.style.overflow = 'hidden'; // إعادة تعيين overflow إلى hidden
     }
     
-    // إخفاء scrollbar
-    document.body.style.overflow = 'hidden';
+    // تعديل نمط الصفحة بالكامل
+    document.body.style.overflow = 'hidden'; // إخفاء scrollbar الرئيسي
     
-    // إضافة style لإخفاء scrollbar عبر CSS
-    const style = document.createElement('style');
-    style.textContent = `
-      ::-webkit-scrollbar {
-        display: none;
-      }
-      
-      * {
-        -ms-overflow-style: none;  /* للإنترنت إكسبلورر وإيدج */
-        scrollbar-width: none;  /* لفايرفوكس */
-      }
-    `;
-    document.head.appendChild(style);
+    // إخفاء شريط التنقل الرئيسي (Navbar)
+    const navbar = document.querySelector('nav.bg-\\[\\#5D1F1F\\].shadow-md.sticky.top-0.z-50');
+    if (navbar instanceof HTMLElement) {
+      navbar.style.display = 'none';
+    }
     
     return () => {
       // إعادة إظهار العناصر عند مغادرة الصفحة
@@ -60,9 +52,9 @@ export default function AdminChatPage() {
       // إعادة الـ scrollbar
       document.body.style.overflow = '';
       
-      // إزالة style للـ scrollbar
-      if (style.parentNode) {
-        style.parentNode.removeChild(style);
+      // إعادة إظهار شريط التنقل الرئيسي
+      if (navbar instanceof HTMLElement) {
+        navbar.style.display = '';
       }
     };
   }, []);
@@ -86,7 +78,7 @@ export default function AdminChatPage() {
   }
 
   return (
-    <>
+    <div className="fixed inset-0 w-full h-full">
       {/* زر لوحة التحكم - تم نقله إلى الجانب الأيسر */}
       <div className="fixed top-4 left-4 z-[10000]">
         <a 
@@ -102,8 +94,10 @@ export default function AdminChatPage() {
         </a>
       </div>
       
-      {/* مكون المحادثات بوضع مستقل */}
-      <AdminChatList isStandalonePage={true} />
-    </>
+      {/* مكون المحادثات */}
+      <div className="h-full w-full">
+        <AdminChatList isStandalonePage={true} />
+      </div>
+    </div>
   );
 } 

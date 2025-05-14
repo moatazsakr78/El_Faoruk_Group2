@@ -19,6 +19,7 @@ export interface UserProfile {
   governorate?: string;
   avatar_url?: string;
   is_admin?: boolean;
+  role?: string; // إضافة حقل الدور (customer, wholesale, preparation, full_details, admin)
   created_at?: string;
   updated_at?: string;
 }

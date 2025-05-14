@@ -87,6 +87,7 @@ function mapDatabaseToAppModel(product: any) {
     productCode: product.product_code || '',
     boxQuantity: validBoxQuantity,
     piecePrice: validPiecePrice,
+    wholesalePrice: product.wholesale_price || 0,
     imageUrl: product.image_url || '',
     isNew: !!product.is_new,
     createdAt: createdDate,
@@ -133,6 +134,7 @@ function mapAppModelToDatabase(product: any) {
     product_code: product.productCode,
     box_quantity: product.boxQuantity,
     piece_price: product.piecePrice,
+    wholesale_price: product.wholesalePrice,
     image_url: product.imageUrl,
     is_new: product.isNew,
     created_at: formattedDate,
@@ -569,6 +571,8 @@ export async function forceRefreshFromServer() {
                      model?.boxQuantity ? Number(model.boxQuantity) : 0,
         piecePrice: typeof model?.piecePrice === 'number' ? model.piecePrice : 
                     model?.piecePrice ? Number(model.piecePrice) : 0,
+        wholesalePrice: typeof model?.wholesalePrice === 'number' ? model.wholesalePrice : 
+                    model?.wholesalePrice ? Number(model.wholesalePrice) : 0,
         imageUrl: model?.imageUrl || '',
         isNew: !!model?.isNew,
         createdAt: model?.createdAt || new Date().toISOString(),
