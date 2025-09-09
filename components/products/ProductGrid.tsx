@@ -7,7 +7,6 @@ import {
   loadProductsFromSupabase, 
   isOnline
 } from '@/lib/supabase';
-import { getProductsByCategoryFromSupabase } from '@/lib/data';
 import { supabase } from '@/lib/supabase-client';
 import RealtimeManager from '@/lib/realtime-manager';
 import { FiSearch } from 'react-icons/fi';
@@ -17,7 +16,6 @@ interface ProductGridProps {
   showViewAll?: boolean;
   viewAllLink?: string;
   limit?: number;
-  filterByCategory?: string;
   searchEnabled?: boolean;
   searchQuery?: string;
 }
@@ -51,7 +49,6 @@ function ProductGrid({
   showViewAll = false,
   viewAllLink = '/products',
   limit,
-  filterByCategory,
   searchEnabled = false,
   searchQuery = '',
 }: ProductGridProps) {
@@ -99,61 +96,20 @@ function ProductGrid({
         
         let processedProducts: Product[] = [];
         
-        if (filterByCategory) {
-          console.log('Filtering by category:', filterByCategory);
-          
-          // استخدام دالة متخصصة لجلب المنتجات حسب الفئة باستخدام العلاقة متعددة إلى متعددة
-          const categoryProducts = await getProductsByCategoryFromSupabase(filterByCategory);
-          
-          if (categoryProducts && categoryProducts.length > 0) {
-            // معالجة المنتجات - إضافة packPrice و boxPrice
-            processedProducts = categoryProducts
-              .filter(product => product !== null)
-              .map(product => ({
-                ...product,
-                packPrice: product.piecePrice * 6, // مثال: علبة تحتوي على 6 قطع
-                boxPrice: product.piecePrice * product.boxQuantity
-              })) as Product[];
-          } else {
-            processedProducts = [];
-          }
+        // جلب كل المنتجات
+        const serverProducts = await loadProductsFromSupabase();
+        
+        if (serverProducts && serverProducts.length > 0) {
+          // Process the products - add packPrice and boxPrice
+          processedProducts = serverProducts
+            .filter(product => product !== null)
+            .map(product => ({
+              ...product,
+              packPrice: product.piecePrice * 6, // مثال: علبة تحتوي على 6 قطع
+              boxPrice: product.piecePrice * product.boxQuantity
+            })) as Product[];
         } else {
-          // جلب كل المنتجات كالمعتاد إذا لم تكن هناك تصفية حسب الفئة
-          const serverProducts = await loadProductsFromSupabase();
-          
-          if (serverProducts && serverProducts.length > 0) {
-            // Process the products - add packPrice and boxPrice
-            processedProducts = serverProducts
-              .filter(product => product !== null)
-              .map(product => ({
-                ...product,
-                packPrice: product.piecePrice * 6, // مثال: علبة تحتوي على 6 قطع
-                boxPrice: product.piecePrice * product.boxQuantity
-              })) as Product[];
-              
-            // جلب علاقات المنتجات والفئات
-            const { data: productCategoriesData, error: categoriesError } = await supabase
-              .from('product_categories')
-              .select('*');
-              
-            if (categoriesError) {
-              console.error('Error fetching product categories:', categoriesError);
-            } else if (productCategoriesData) {
-              // إضافة الفئات إلى المنتجات
-              processedProducts = processedProducts.map(product => {
-                const categoryIds = productCategoriesData
-                  .filter(pc => pc.product_id === product.id)
-                  .map(pc => pc.category_id);
-                
-                return {
-                  ...product,
-                  selectedCategories: categoryIds
-                };
-              });
-            }
-          } else {
-            processedProducts = [];
-          }
+          processedProducts = [];
         }
 
         // تصفية المنتجات الجديدة محسنة
@@ -236,7 +192,7 @@ function ProductGrid({
       window.removeEventListener('online', handleOnlineStatusChange);
       window.removeEventListener('offline', handleOnlineStatusChange);
     };
-  }, [limit, filterByCategory]);
+  }, [limit]);
 
   // تطبيق البحث المحسن مع debouncing
   const debouncedSearch = useMemo(() => {
@@ -578,7 +534,6 @@ function ProductGrid({
 // تصدير محسن مع React.memo
 export default memo(ProductGrid, (prevProps, nextProps) => {
   return (
-    prevProps.filterByCategory === nextProps.filterByCategory &&
     prevProps.searchQuery === nextProps.searchQuery &&
     prevProps.limit === nextProps.limit &&
     prevProps.title === nextProps.title
