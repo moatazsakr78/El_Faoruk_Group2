@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__supabase__list_projects",
+      "mcp__supabase__list_tables",
+      "Bash(npm run dev:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run build:*)",
+      "Read(//c/Users/pc/Desktop/claude code/project-images/sub-images/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

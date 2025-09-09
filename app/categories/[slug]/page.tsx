@@ -1,7 +1,7 @@
 'use client';
 
 import ProductGrid from '@/components/products/ProductGrid';
-import { getCategoryBySlug, createSlug } from '@/lib/data';
+import { getCategoryBySlug, createSlug, getProductsByCategoryFromSupabase } from '@/lib/data';
 import { useEffect, useState } from 'react';
 import { Category } from '@/types';
 import { loadData } from '@/lib/localStorage';
@@ -248,6 +248,12 @@ export default function CategoryPage({ params }: Props) {
     <div className="container mx-auto px-4 py-12">
       <h1 className="text-4xl font-bold mb-4">{category.name}</h1>
       <p className="text-lg text-gray-600 mb-8">{category.description}</p>
+      
+      <div className="mb-4 text-sm bg-gray-100 p-2 rounded">
+        <p>Debug - Category ID: {category.id}</p>
+        <p>Debug - Category Name: {category.name}</p>
+        <p>Debug - Category Slug: {category.slug}</p>
+      </div>
       
       <ProductGrid 
         filterByCategory={category.id} 

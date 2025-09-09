@@ -31,6 +31,7 @@ interface Category {
   slug: string;
   image?: string;
   description?: string;
+  color?: string;
 }
 
 interface Product {
@@ -45,6 +46,9 @@ interface Product {
   createdAt: string;
   created_at?: string;
   updated_at?: string;
+  categoryId?: string;
+  categories?: Category[];
+  selectedCategories?: string[];
 }
 
 export default function AdminProducts() {
@@ -64,6 +68,8 @@ export default function AdminProducts() {
     wholesalePrice: '',
     imageUrl: '',
     isNew: false,
+    categoryId: '',
+    selectedCategories: [] as string[],
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
@@ -189,8 +195,24 @@ export default function AdminProducts() {
   // تحميل بيانات الفئات
   const loadCategoriesData = async () => {
     try {
-      // استخدام دالة getCategories مباشرة
-      setCategories(getCategories());
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name');
+        
+      if (error) {
+        console.error('خطأ في تحميل الفئات:', error);
+        // استخدام دالة getCategories كبديل
+        setCategories(getCategories());
+        return;
+      }
+      
+      if (data) {
+        setCategories(data);
+      } else {
+        // استخدام دالة getCategories كبديل
+        setCategories(getCategories());
+      }
     } catch (error) {
       console.error('Error loading categories:', error);
       // استخدام دالة getCategories كبديل
@@ -213,9 +235,37 @@ export default function AdminProducts() {
       
       console.log('تم تحميل المنتجات من Supabase بنجاح. عدد المنتجات:', products.length);
       
+      // جلب علاقات المنتجات بالفئات - دائماً نجلب العلاقات بشكل منفصل
+      const { data: productCategoriesData, error: productCategoriesError } = await supabase
+        .from('product_categories')
+        .select('*');
+        
+      if (productCategoriesError) {
+        console.error('خطأ في تحميل علاقات الفئات بالمنتجات:', productCategoriesError);
+      } else {
+        console.log('تم تحميل علاقات الفئات للمنتجات بنجاح. عدد العلاقات:', productCategoriesData.length);
+        console.log('عينة من علاقات الفئات:', productCategoriesData.slice(0, 3));
+      }
+      
+      // ربط الفئات بالمنتجات
+      const productsWithCategories = products.map(product => {
+        // البحث عن علاقات الفئات لهذا المنتج
+        const productCategories = productCategoriesData?.filter(pc => pc.product_id === product.id) || [];
+        const categoryIds = productCategories.map(pc => pc.category_id);
+        
+        console.log(`المنتج ${product.name} (${product.id}) له ${categoryIds.length} فئة:`, categoryIds);
+        
+        // إضافة هذه العلاقات إلى المنتج
+        return {
+          ...product,
+          categoryIds: categoryIds,  // نحفظ جميع معرفات الفئات
+          selectedCategories: categoryIds  // لتسهيل العرض في نموذج التحرير
+        };
+      });
+      
       // يتم استلام المنتجات مرتبة من الخادم حسب تاريخ الإنشاء (الأحدث أولاً)
       // ولكن نقوم بالترتيب مرة أخرى هنا للتأكد من عرض المنتجات الأحدث في الأعلى
-      const sortedProducts = [...products].sort((a, b) => {
+      const sortedProducts = [...productsWithCategories].sort((a, b) => {
         // استخدام تاريخ الإنشاء للترتيب (من الأحدث للأقدم)
         const dateA = new Date(a.created_at || a.createdAt || 0).getTime();
         const dateB = new Date(b.created_at || b.createdAt || 0).getTime();
@@ -378,7 +428,8 @@ export default function AdminProducts() {
         is_new: product.isNew,
         created_at: product.createdAt || currentDate,
         updated_at: currentDate,
-        category_id: null // إذا كان هناك حاجة لتعيين فئة
+        // لا نستخدم category_id بعد الآن لأننا نستخدم علاقات متعددة في جدول product_categories
+        category_id: null
       };
 
       console.log('Final product data to save:', dbProduct);
@@ -505,17 +556,61 @@ export default function AdminProducts() {
       wholesalePrice: '',
       imageUrl: '',
       isNew: false,
+      categoryId: '',
+      selectedCategories: [],
     });
     setIsModalOpen(true);
   };
 
-  const handleEditProduct = (product: Product) => {
+  const handleEditProduct = async (product: Product) => {
+    console.log('تحرير المنتج:', product);
     setCurrentProduct(product);
+    
+    // جلب فئات المنتج - دائماً نجلب من قاعدة البيانات للتأكد من آخر البيانات
+    let productCategories: string[] = [];
+    
+    try {
+      console.log('جلب فئات المنتج من قاعدة البيانات:', product.id);
+      const { data, error } = await supabase
+        .from('product_categories')
+        .select('*')
+        .eq('product_id', product.id);
+        
+      if (error) {
+        console.error('خطأ في جلب فئات المنتج:', error);
+      } else {
+        console.log('نتيجة استعلام فئات المنتج:', data);
+        
+        if (data && data.length > 0) {
+          productCategories = data.map(item => item.category_id);
+          console.log('تم العثور على الفئات في قاعدة البيانات:', productCategories);
+        } else {
+          console.log('لم يتم العثور على فئات في قاعدة البيانات');
+          
+          // نستخدم الفئات المحملة مسبقاً إذا كانت موجودة
+          if (product.selectedCategories && product.selectedCategories.length > 0) {
+            productCategories = product.selectedCategories;
+            console.log('استخدام الفئات المحملة مسبقاً:', productCategories);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('خطأ غير متوقع في جلب فئات المنتج:', error);
+      
+      // استخدام الفئات المحملة مسبقاً في حالة الخطأ
+      if (product.selectedCategories && product.selectedCategories.length > 0) {
+        productCategories = product.selectedCategories;
+        console.log('حدث خطأ، استخدام الفئات المحملة مسبقاً:', productCategories);
+      }
+    }
+    
     setFormData({
       name: product.name,
       productCode: product.productCode,
       boxQuantity: product.boxQuantity.toString(),
       piecePrice: product.piecePrice.toString(),
+      categoryId: product.categoryId || '',
+      selectedCategories: productCategories,
       wholesalePrice: product.wholesalePrice?.toString() || '',
       imageUrl: product.imageUrl,
       isNew: product.isNew,
@@ -773,6 +868,51 @@ export default function AdminProducts() {
       const success = await saveProductToSupabase(updatedProduct);
       
       if (success) {
+        // حفظ علاقات الفئات
+        try {
+          console.log('بدء حفظ علاقات الفئات للمنتج:', productId);
+          console.log('الفئات المحددة:', formData.selectedCategories);
+          
+          // حذف العلاقات القديمة أولاً
+          const { error: deleteError } = await supabase
+            .from('product_categories')
+            .delete()
+            .eq('product_id', productId);
+            
+          if (deleteError) {
+            console.error('خطأ في حذف علاقات الفئات القديمة:', deleteError);
+          } else {
+            console.log('تم حذف علاقات الفئات القديمة بنجاح');
+          }
+          
+          // إضافة العلاقات الجديدة فقط إذا كان هناك فئات محددة
+          if (formData.selectedCategories && formData.selectedCategories.length > 0) {
+            // إنشاء العلاقات الجديدة
+            const categoryRelations = formData.selectedCategories.map(categoryId => ({
+              id: uuidv4(),
+              product_id: productId,
+              category_id: categoryId
+            }));
+            
+            console.log('علاقات الفئات الجديدة:', categoryRelations);
+            
+            const { data, error } = await supabase
+              .from('product_categories')
+              .insert(categoryRelations)
+              .select();
+              
+            if (error) {
+              console.error('خطأ في إضافة علاقات الفئات:', error);
+            } else {
+              console.log('تم إضافة علاقات الفئات بنجاح:', data);
+            }
+          } else {
+            console.log('لا توجد فئات محددة للإضافة، تم حذف العلاقات القديمة فقط');
+          }
+        } catch (error) {
+          console.error('خطأ غير متوقع في حفظ علاقات الفئات:', error);
+        }
+        
         // إعادة تعيين مرجع ملف الإدخال
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -834,30 +974,9 @@ export default function AdminProducts() {
         </div>
       )}
       
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold mb-2 md:mb-0">إدارة المنتجات</h1>
-        <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={handleSyncWithServer} 
-            className="bg-green-600 text-white px-4 py-2 rounded-md shadow-sm hover:shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center"
-            disabled={isSyncing || isLoading || !isOnline()}
-          >
-            {isSyncing ? (
-              <span className="flex items-center">
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                جاري المزامنة...
-              </span>
-            ) : (
-              <span className="flex items-center">
-                <FiRefreshCw className="ml-2" />
-                مزامنة مع السيرفر
-              </span>
-            )}
-          </button>
-          
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2 md:mb-0">إدارة المنتجات</h1>
+        <div className="flex space-x-2 space-x-reverse">
           <button
             onClick={handleAddProduct}
             className="bg-primary text-white px-4 py-2 rounded-md flex items-center self-end md:self-auto"
@@ -889,6 +1008,9 @@ export default function AdminProducts() {
                 سعر الجملة
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                الفئات
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 الإجراءات
               </th>
             </tr>
@@ -903,17 +1025,23 @@ export default function AdminProducts() {
                       alt={product.name}
                       className="h-10 w-10 rounded-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.src = 'https://via.placeholder.com/40?text=No+Image';
+                        const target = e.target as HTMLImageElement;
+                        target.src = 'https://via.placeholder.com/100?text=خطأ';
                       }}
                     />
                   ) : (
                     <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                      <span className="text-xs text-gray-500">لا توجد صورة</span>
+                      <FiImage className="h-5 w-5 text-gray-400" />
                     </div>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {product.name}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                  {product.isNew && (
+                    <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                      جديد
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {product.productCode}
@@ -924,19 +1052,39 @@ export default function AdminProducts() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {product.wholesalePrice ? `${product.wholesalePrice} جنيه` : '-'}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex flex-wrap gap-1">
+                    {product.selectedCategories && product.selectedCategories.length > 0 ? (
+                      product.selectedCategories.map(categoryId => {
+                        const category = categories.find(c => c.id === categoryId);
+                        return category ? (
+                          <span key={categoryId} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+                            {category.name}
+                          </span>
+                        ) : null;
+                      })
+                    ) : (
+                      <span className="text-gray-400 text-xs">لا توجد فئات</span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <button
-                    onClick={() => handleEditProduct(product)}
-                    className="text-indigo-600 hover:text-indigo-900 ml-3"
-                  >
-                    <FiEdit />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteProduct(product.id)}
-                    className="text-[#5D1F1F] hover:text-[#300000]"
-                  >
-                    <FiTrash2 />
-                  </button>
+                  <div className="flex space-x-2 space-x-reverse">
+                    <button
+                      onClick={() => handleEditProduct(product)}
+                      className="text-blue-600 hover:text-blue-900"
+                      aria-label="تعديل"
+                    >
+                      <FiEdit className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProduct(product.id)}
+                      className="text-red-600 hover:text-red-900"
+                      aria-label="حذف"
+                    >
+                      <FiTrash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -971,17 +1119,38 @@ export default function AdminProducts() {
             
             <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
               <div className="bg-gray-50 p-2 rounded">
-                <span className="font-bold">سعر القطعة:</span> {product.piecePrice} جنيه
+                <span className="font-medium text-gray-600">السعر: </span>
+                {product.piecePrice} ج.م
               </div>
               <div className="bg-gray-50 p-2 rounded">
-                <span className="font-bold">سعر الجملة:</span> {product.wholesalePrice ? `${product.wholesalePrice} جنيه` : '-'}
+                <span className="font-medium text-gray-600">الكمية في الكرتونة: </span>
+                {product.boxQuantity}
               </div>
               <div className="bg-gray-50 p-2 rounded">
-                <span className="font-bold">الكمية:</span> {product.boxQuantity} قطعة
+                <span className="font-medium text-gray-600">سعر الجملة: </span>
+                {product.wholesalePrice ? `${product.wholesalePrice} ج.م` : '-'}
               </div>
             </div>
             
-            <div className="flex justify-end gap-4 mt-2">
+            <div className="mb-4">
+              <span className="font-medium text-gray-600 block mb-1">الفئات: </span>
+              <div className="flex flex-wrap gap-1">
+                {product.selectedCategories && product.selectedCategories.length > 0 ? (
+                  product.selectedCategories.map(categoryId => {
+                    const category = categories.find(c => c.id === categoryId);
+                    return category ? (
+                      <span key={categoryId} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+                        {category.name}
+                      </span>
+                    ) : null;
+                  })
+                ) : (
+                  <span className="text-gray-400 text-xs">لا توجد فئات</span>
+                )}
+              </div>
+            </div>
+            
+            <div className="mt-auto flex justify-end space-x-2 space-x-reverse">
               <button
                 onClick={() => handleEditProduct(product)}
                 className="bg-blue-500 text-white px-4 py-2 rounded-md flex items-center text-sm"
@@ -1133,76 +1302,134 @@ export default function AdminProducts() {
                 </div>
               </div>
               
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                {formData.imageUrl ? (
+                  <div className="relative">
+                    <OptimizedImg 
+                      src={formData.imageUrl} 
+                      alt="صورة المنتج" 
+                      className="h-32 w-32 object-cover rounded-md" 
+                    />
+                    <button
+                      type="button"
+                      onClick={handleImageClick}
+                      className="absolute bottom-0 left-0 bg-primary text-white p-1 rounded-md"
+                    >
+                      <FiEdit className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleImageClick}
+                    className="bg-gray-200 hover:bg-gray-300 p-6 sm:p-8 rounded-md flex flex-col items-center w-full sm:w-auto"
+                  >
+                    <FiImage className="h-8 w-8 text-gray-500" />
+                    <span className="mt-2 text-gray-600 text-sm">اضغط لإضافة صورة</span>
+                  </button>
+                )}
+                <div className="flex-1 w-full">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <input
+                    type="text"
+                    value={formData.imageUrl}
+                    onChange={(e) =>
+                      setFormData({ ...formData, imageUrl: e.target.value })
+                    }
+                    placeholder="أو أدخل رابط الصورة مباشرة"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  صورة المنتج
+                  الفئات
                 </label>
-                <div className="mt-1 flex flex-col sm:flex-row items-center gap-4">
-                  {formData.imageUrl ? (
-                    <div className="relative">
-                      <OptimizedImg 
-                        src={formData.imageUrl} 
-                        alt="صورة المنتج" 
-                        className="h-32 w-32 object-cover rounded-md" 
-                      />
-                      <button
-                        type="button"
-                        onClick={handleImageClick}
-                        className="absolute bottom-0 left-0 bg-primary text-white p-1 rounded-md"
-                      >
-                        <FiEdit className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleImageClick}
-                      className="bg-gray-200 hover:bg-gray-300 p-6 sm:p-8 rounded-md flex flex-col items-center w-full sm:w-auto"
-                    >
-                      <FiImage className="h-8 w-8 text-gray-500" />
-                      <span className="mt-2 text-gray-600 text-sm">اضغط لإضافة صورة</span>
-                    </button>
-                  )}
-                  <div className="flex-1 w-full">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleImageChange}
-                      accept="image/*"
-                      className="hidden"
-                    />
-                    <input
-                      type="text"
-                      value={formData.imageUrl}
-                      onChange={(e) =>
-                        setFormData({ ...formData, imageUrl: e.target.value })
-                      }
-                      placeholder="أو أدخل رابط الصورة مباشرة"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    />
+                
+                                  <div className="mt-1 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-300 rounded-md">
+                    {categories.map((category) => (
+                      <div key={category.id} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`category-${category.id}`}
+                          checked={formData.selectedCategories.includes(category.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({
+                                ...formData,
+                                selectedCategories: [...formData.selectedCategories, category.id]
+                              });
+                            } else {
+                              setFormData({
+                                ...formData,
+                                selectedCategories: formData.selectedCategories.filter(id => id !== category.id)
+                              });
+                            }
+                          }}
+                          className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                        />
+                        <label
+                          htmlFor={`category-${category.id}`}
+                          className="mr-2 flex items-center"
+                        >
+                          <div
+                            className="w-3 h-3 rounded-full mr-1"
+                            style={{ backgroundColor: category.color || '#cccccc' }}
+                          ></div>
+                          <span className="text-sm">{category.name}</span>
+                        </label>
+                      </div>
+                    ))}
                   </div>
+                  
+                  {/* عرض فئات المنتج بشكل واضح - تشخيص */}
+                  {formData.selectedCategories && formData.selectedCategories.length > 0 && (
+                    <div className="mt-2 p-2 border border-blue-200 bg-blue-50 rounded-md">
+                      <h4 className="text-sm text-blue-700 font-medium mb-1">الفئات المحددة:</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {formData.selectedCategories.map(categoryId => {
+                          const category = categories.find(c => c.id === categoryId);
+                          return category ? (
+                            <span key={categoryId} className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+                              {category.name}
+                            </span>
+                          ) : (
+                            <span key={categoryId} className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
+                              فئة غير معروفة: {categoryId}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-              
-              <div className="flex justify-end gap-2 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md hover:bg-gray-100"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUpdateProduct}
-                  className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark"
-                >
-                  {currentProduct ? 'تحديث' : 'إضافة'}
-                </button>
-              </div>
             </form>
+            
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 text-gray-600 rounded-md hover:bg-gray-100"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleUpdateProduct}
+                className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary-dark"
+              >
+                {currentProduct ? 'تحديث' : 'إضافة'}
+              </button>
+            </div>
           </div>
         </div>
       )}

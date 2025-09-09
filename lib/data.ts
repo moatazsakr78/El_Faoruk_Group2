@@ -3,6 +3,7 @@
 import productsData from './data/products.json';
 import categoriesData from './data/categories.json';
 import { Product, Category } from '@/types';
+import { supabase } from '@/lib/supabase-client';
 
 // وظيفة مساعدة لتنسيق المنتجات وفقًا للواجهة الحالية
 function formatProduct(product: any): any {
@@ -273,6 +274,88 @@ export function getAllProductIds() {
     }));
   } catch (error) {
     console.error('خطأ في الحصول على معرفات المنتجات:', error);
+    return [];
+  }
+}
+
+/**
+ * دالة محسنة للحصول على المنتجات حسب الفئة
+ * @param categoryId معرف الفئة
+ * @returns مصفوفة من المنتجات التي تنتمي للفئة
+ */
+export async function getProductsByCategoryFromSupabase(categoryId: string) {
+  if (!categoryId) return [];
+  
+  try {
+    // استعلام واحد محسن باستخدام join بدلاً من عدة استعلامات
+    const { data: products, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        product_categories!inner(category_id)
+      `)
+      .eq('product_categories.category_id', categoryId)
+      .order('created_at', { ascending: false });
+      
+    if (error) {
+      console.error('Error fetching products by category:', error);
+      return [];
+    }
+    
+    if (!products || products.length === 0) {
+      return [];
+    }
+    
+    // معالجة البيانات وإضافة الحقول المحسوبة
+    const processedProducts = products.map(product => ({
+      ...product,
+      imageUrl: product.image_url || product.imageUrl || '',
+      packPrice: product.piece_price ? product.piece_price * 6 : 0,
+      boxPrice: product.piece_price && product.box_quantity ? 
+                product.piece_price * product.box_quantity : 0,
+      selectedCategories: [categoryId] // نعرف بالفعل أنها تنتمي لهذه الفئة
+    }));
+    
+    return processedProducts;
+  } catch (error) {
+    console.error('Error in getProductsByCategoryFromSupabase:', error);
+    return [];
+  }
+}
+
+/**
+ * دالة محسنة لجلب جميع المنتجات مع علاقاتها بالفئات
+ */
+export async function getAllProductsWithCategories() {
+  try {
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select(`
+        *,
+        product_categories(category_id)
+      `)
+      .order('created_at', { ascending: false });
+      
+    if (productsError) {
+      console.error('Error fetching products:', productsError);
+      return [];
+    }
+    
+    if (!products) return [];
+    
+    // معالجة البيانات
+    const processedProducts = products.map(product => ({
+      ...product,
+      imageUrl: product.image_url || product.imageUrl || '',
+      packPrice: product.piece_price ? product.piece_price * 6 : 0,
+      boxPrice: product.piece_price && product.box_quantity ? 
+                product.piece_price * product.box_quantity : 0,
+      selectedCategories: (product as any).product_categories?.map((pc: any) => pc.category_id) || []
+    }));
+    
+    return processedProducts;
+  } catch (error) {
+    console.error('Error in getAllProductsWithCategories:', error);
     return [];
   }
 } 

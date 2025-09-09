@@ -1,13 +1,6 @@
 // وظائف إدارة المصادقة مع Supabase
-import { createClient } from '@supabase/supabase-js';
 import { User, Session } from '@supabase/supabase-js';
-
-// استخدام متغيرات البيئة أو القيم الافتراضية
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://scbtgnknfahvxlcalfrk.supabase.co';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjYnRnbmtuZmFodnhsY2FsZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwMDA2ODYsImV4cCI6MjA2MjU3NjY4Nn0.47A0DCKjvPmkKECE0NFttvPFceyug98zIiufOVRjfPQ';
-
-// إنشاء عميل Supabase
-export const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from './supabase-client';
 
 // واجهة بيانات المستخدم
 export interface UserProfile {
@@ -22,6 +15,80 @@ export interface UserProfile {
   role?: string; // إضافة حقل الدور (customer, wholesale, preparation, full_details, admin)
   created_at?: string;
   updated_at?: string;
+}
+
+// Optimized user cache with longer TTL for better performance
+let userCache: {
+  user: User | null;
+  timestamp: number;
+} | null = null;
+
+const USER_CACHE_TTL = 300000; // 5 minutes - reduced database calls
+
+function isUserCacheValid(): boolean {
+  if (!userCache) return false;
+  return (Date.now() - userCache.timestamp) < USER_CACHE_TTL;
+}
+
+// الحصول على المستخدم الحالي
+export async function getCurrentUser(): Promise<User | null> {
+  // التحقق من وجود بيانات في التخزين المؤقت
+  if (isUserCacheValid()) {
+    return userCache!.user;
+  }
+  
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // تخزين المستخدم في التخزين المؤقت
+    userCache = {
+      user,
+      timestamp: Date.now()
+    };
+    
+    return user;
+  } catch (error) {
+    console.error('Error fetching current user:', error);
+    return null;
+  }
+}
+
+// Optimized profile cache
+let profileCache: {
+  profile: UserProfile | null;
+  timestamp: number;
+} | null = null;
+
+const PROFILE_CACHE_TTL = 300000; // 5 minutes - significant reduction in auth queries
+
+// الحصول على ملف المستخدم الحالي
+export async function getCurrentUserProfile(): Promise<UserProfile | null> {
+  // التحقق من وجود بيانات في التخزين المؤقت
+  if (profileCache && (Date.now() - profileCache.timestamp < PROFILE_CACHE_TTL)) {
+    return profileCache.profile;
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .rpc('get_current_user')
+      .single();
+    
+    if (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+    
+    // تخزين الملف الشخصي في التخزين المؤقت
+    profileCache = {
+      profile: data as UserProfile,
+      timestamp: Date.now()
+    };
+    
+    return data as UserProfile;
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return null;
+  }
 }
 
 // التحقق من وجود جدول المستخدمين وإنشاؤه إذا لم يكن موجودًا
@@ -295,26 +362,6 @@ export async function signOut() {
   return { error };
 }
 
-// الحصول على المستخدم الحالي
-export async function getCurrentUser(): Promise<User | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
-}
-
-// الحصول على ملف المستخدم الحالي
-export async function getCurrentUserProfile(): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .rpc('get_current_user')
-    .single();
-  
-  if (error) {
-    console.error('Error fetching user profile:', error);
-    return null;
-  }
-  
-  return data as UserProfile;
-}
-
 // تحديث ملف المستخدم
 export async function updateUserProfile(profile: Partial<UserProfile>) {
   // إذا كان يتم تحديث اسم المستخدم، تحقق من وجوده مسبقاً
@@ -365,7 +412,18 @@ export async function isUserAdmin(): Promise<boolean> {
 
 // الاستماع لتغييرات جلسة المستخدم
 export function onAuthStateChange(callback: (user: User | null) => void) {
+  // إعادة تعيين التخزين المؤقت عند تغيير حالة المصادقة
+  const resetCache = () => {
+    userCache = null;
+    profileCache = null;
+  };
+  
   return supabase.auth.onAuthStateChange((event, session) => {
+    // إعادة تعيين التخزين المؤقت عند تسجيل الدخول أو الخروج
+    if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+      resetCache();
+    }
+    
     callback(session?.user || null);
   });
 }

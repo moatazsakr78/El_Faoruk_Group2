@@ -9,17 +9,27 @@
  * @returns عنوان URL محسّن للصورة مع معلمة إصدار
  */
 export function addVersionToImageUrl(url: string, version?: string | number): string {
-  if (!url) return url;
+  if (!url) return '';
   
-  // التحقق مما إذا كان الرابط من Supabase Storage
-  if (!url.includes('supabase.co/storage')) return url;
-  
-  // استخدام الطابع الزمني الحالي كقيمة افتراضية للإصدار
-  const versionValue = version || Date.now();
-  
-  // إضافة معلمة الإصدار إلى عنوان URL
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}v=${versionValue}`;
+  try {
+    // تجنب إضافة معلمة الإصدار إذا كانت موجودة بالفعل
+    if (url.includes('v=')) return url;
+    
+    // استخدام الطابع الزمني الحالي كقيمة افتراضية للإصدار
+    const versionValue = version || Date.now();
+    
+    // إضافة معلمة الإصدار إلى عنوان URL
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}v=${versionValue}`;
+  } catch (error) {
+    console.error('خطأ في إضافة معلمة الإصدار للرابط:', error);
+    
+    // محاولة إضافة معلمة للمسار النسبي
+    if (url.includes('?')) {
+      return `${url}&v=${Date.now()}`;
+    }
+    return `${url}?v=${Date.now()}`;
+  }
 }
 
 /**
@@ -89,4 +99,36 @@ export function getProxiedImageUrl(url: string): string {
   
   // إنشاء عنوان URL للصورة المحسنة عبر API Route
   return `/api/optimized-image?url=${encodedUrl}`;
+}
+
+/**
+ * وظائف مساعدة لمعالجة الصور
+ */
+
+/**
+ * تحديد نوع الصورة من ملف أو بيانات
+ * @param {File | string} fileOrBase64 ملف أو بيانات Base64
+ * @returns {string} نوع الصورة (jpeg, png, gif, webp, etc.)
+ */
+export function getImageType(fileOrBase64: File | string): string {
+  if (typeof fileOrBase64 === 'string') {
+    // التحقق من البيانات المشفرة بترميز Base64
+    if (fileOrBase64.startsWith('data:image/')) {
+      const matches = fileOrBase64.match(/^data:image\/([a-zA-Z0-9]+);base64,/);
+      if (matches && matches.length > 1) {
+        return matches[1];
+      }
+    }
+    // افتراض جيف كنوع افتراضي
+    return 'jpeg';
+  } else {
+    // ملف عادي
+    const type = fileOrBase64.type;
+    const matches = type.match(/image\/([a-zA-Z0-9]+)/);
+    if (matches && matches.length > 1) {
+      return matches[1];
+    }
+    // افتراض jpeg كنوع افتراضي
+    return 'jpeg';
+  }
 } 

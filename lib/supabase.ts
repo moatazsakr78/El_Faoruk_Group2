@@ -1,52 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
 import { Product } from '@/types';
 import { saveData } from './localStorage';
 import { logSupabaseError, logSuccessfulSync } from './supabase-error-handler';
+import { supabase, isOnline } from './supabase-client';
 
-// تعريف interface للخطأ المخصص
+// Export the centralized client
+export { supabase, isOnline };
+
+// Enhanced error interface
 interface EnhancedError extends Error {
   userFriendlyMessage?: string;
 }
 
-// إعدادات Supabase من متغيرات البيئة أو القيم الثابتة
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://scbtgnknfahvxlcalfrk.supabase.co';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNjYnRnbmtuZmFodnhsY2FsZnJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDcwMDA2ODYsImV4cCI6MjA2MjU3NjY4Nn0.47A0DCKjvPmkKECE0NFttvPFceyug98zIiufOVRjfPQ';
-
-// إعداد خيارات العميل
-const supabaseOptions = {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: false
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'HeaWaBas Web App',
-    },
-  },
-  // تعيين مهلة للطلبات
-  fetch: (url: RequestInfo, options?: RequestInit) => {
-    return fetch(url, {
-      ...options,
-      signal: options?.signal || AbortSignal.timeout(30000), // مهلة 30 ثانية
-    });
-  },
-};
-
-// إنشاء عميل Supabase
-export const supabase = createClient(supabaseUrl, supabaseKey, supabaseOptions);
-
-// متغير عام للإشارة إلى آخر تحديث
+// Simplified sync timestamp management
 let lastSyncTimestamp = 0;
-// عند تهيئة التطبيق، نحاول استرجاع آخر وقت مزامنة من التخزين
 if (typeof window !== 'undefined') {
-  try {
-    const savedTimestamp = localStorage.getItem('lastSyncTimestamp');
-    if (savedTimestamp) {
-      lastSyncTimestamp = parseInt(savedTimestamp, 10);
-    }
-  } catch (e) {
-    console.error('خطأ في تحميل طابع المزامنة الزمني:', e);
+  const savedTimestamp = localStorage.getItem('lastSyncTimestamp');
+  if (savedTimestamp) {
+    lastSyncTimestamp = parseInt(savedTimestamp, 10) || 0;
   }
 }
 
@@ -183,6 +153,28 @@ async function createProductsTable() {
   }
 }
 
+// دالة للتحقق من وجود جدول المنتجات وإنشائه إذا لم يكن موجوداً
+async function createOrUpdateProductsTable() {
+  try {
+    // التحقق من وجود الجدول
+    const { data, error } = await supabase
+      .from('products')
+      .select('id')
+      .limit(1);
+      
+    if (error) {
+      console.log('خطأ في الوصول لجدول المنتجات، محاولة إنشائه...');
+      return await createProductsTable();
+    }
+    
+    console.log('تم التحقق من وجود جدول المنتجات');
+    return true;
+  } catch (error) {
+    console.error('خطأ غير متوقع أثناء التحقق من وجود جدول المنتجات:', error);
+    return false;
+  }
+}
+
 /**
  * حفظ المنتجات في Supabase
  * @param products المنتجات المراد حفظها
@@ -258,11 +250,13 @@ export async function loadProductsFromSupabase() {
       throw new Error('لا يوجد اتصال بالإنترنت');
     }
 
-    console.log('جاري تحميل المنتجات من Supabase...');
-    
+    // استعلام محسن مع علاقات الفئات
     const { data, error } = await supabase
       .from('products')
-      .select('*')
+      .select(`
+        *,
+        product_categories(category_id)
+      `)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -270,7 +264,6 @@ export async function loadProductsFromSupabase() {
       throw error;
     }
     
-    // التحقق من وجود بيانات
     if (!data || data.length === 0) {
       console.log('لا توجد منتجات في Supabase');
       return null;
@@ -278,243 +271,26 @@ export async function loadProductsFromSupabase() {
     
     console.log('تم تحميل المنتجات بنجاح من Supabase:', data.length);
     
-    // تحديث الطابع الزمني للمزامنة
+    // تحديث الطابع الزمني
     lastSyncTimestamp = Date.now();
-    try {
+    if (typeof window !== 'undefined') {
       localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp.toString());
-    } catch (error) {
-      console.error('خطأ في حفظ وقت المزامنة:', error);
     }
     
-    // تحويل البيانات إلى نموذج التطبيق
-    const appModels = data.map(mapDatabaseToAppModel);
-    return appModels;
+    // معالجة محسنة للبيانات مع الحقول المحسوبة
+    const processedProducts = data.map(product => ({
+      ...mapDatabaseToAppModel(product),
+      selectedCategories: (product as any).product_categories?.map((pc: any) => pc.category_id) || []
+    }));
+    
+    return processedProducts;
   } catch (error) {
     console.error('خطأ في loadProductsFromSupabase:', error);
     throw error;
   }
 }
 
-// دالة فعالة للمزامنة مع قاعدة البيانات
-export async function syncProductsFromSupabase(force = false) {
-  if (!isOnline()) {
-    console.log('الجهاز غير متصل بالإنترنت. لا يمكن المزامنة.');
-    return null;
-  }
-  
-  try {
-    console.log('بدء مزامنة المنتجات...');
-    
-    // تحقق مما إذا كانت المزامنة الأخيرة جديدة جدًا (أقل من 10 ثوانٍ) ولم يتم طلب التحديث القسري
-    const storedTimestamp = localStorage.getItem('lastSyncTimestamp');
-    if (!force && storedTimestamp) {
-      const lastSync = parseInt(storedTimestamp);
-      const now = Date.now();
-      // إذا كانت آخر مزامنة في آخر 10 ثوانٍ، تخطي المزامنة
-      if (now - lastSync < 10000) {
-        console.log('تم المزامنة مؤخرًا، سيتم تخطي هذا الطلب');
-        return null;
-      }
-    }
-    
-    // تحميل البيانات من السيرفر أولاً
-    console.log('محاولة تحميل البيانات من السيرفر...');
-    let serverData = null;
-    
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        // التحقق مما إذا كان الخطأ بسبب عدم وجود جدول المنتجات
-        if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
-          console.log('جدول المنتجات غير موجود في قاعدة البيانات.');
-          
-          // محاولة إنشاء جدول المنتجات هنا غير ممكنة مباشرة
-          // سيتم التركيز على رفع البيانات المحلية لاحقاً
-        } else {
-          throw error;
-        }
-      } else if (data && data.length > 0) {
-        console.log('تم العثور على البيانات في السيرفر:', data.length);
-        // تحويل البيانات إلى نموذج التطبيق
-        serverData = data.map(mapDatabaseToAppModel);
-      } else {
-        console.log('لم يتم العثور على بيانات في السيرفر');
-      }
-    } catch (fetchError: any) {
-      console.error('خطأ في جلب البيانات من السيرفر:', fetchError);
-      if (fetchError.message && (fetchError.message.includes('createdAt') || fetchError.message.includes('created_at'))) {
-        console.warn('خطأ في هيكل الجدول: مشكلة في حقل تاريخ الإنشاء. تعديل البيانات للتوافق...');
-      }
-    }
-    
-    // تحميل البيانات المحلية
-    let localData = [];
-    try {
-      const storedData = localStorage.getItem('products');
-      if (storedData) {
-        localData = JSON.parse(storedData);
-        console.log('تم تحميل البيانات المحلية:', localData.length);
-      }
-    } catch (error) {
-      console.error('خطأ في تحميل البيانات المحلية:', error);
-    }
-    
-    // إذا وجدنا بيانات على السيرفر، استخدمها وحدّث البيانات المحلية
-    if (serverData) {
-      console.log('استخدام بيانات السيرفر وتحديث التخزين المحلي');
-      
-      // تحديث البيانات المحلية
-      localStorage.setItem('products', JSON.stringify(serverData));
-      try {
-        const request = indexedDB.open('HeaWaBas_Storage', 1);
-        request.onsuccess = function(event) {
-          const db = (event.target as IDBOpenDBRequest).result;
-          const transaction = db.transaction(['data_store'], 'readwrite');
-          const store = transaction.objectStore('data_store');
-          store.put({ key: 'products', value: serverData });
-        };
-      } catch (error) {
-        console.error('خطأ في تحديث IndexedDB:', error);
-      }
-      
-      // تحديث الطابع الزمني للمزامنة
-      lastSyncTimestamp = Date.now();
-      localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp.toString());
-      
-      // إعلام التطبيق بالتغييرات
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('storage'));
-        window.dispatchEvent(new CustomEvent('customStorageChange', { 
-          detail: { type: 'products', timestamp: Date.now(), source: 'server' }
-        }));
-      }
-      
-      return serverData;
-    } 
-    // إذا لم نجد بيانات على السيرفر ولكن لدينا بيانات محلية، ارفعها إلى السيرفر
-    else if (localData.length > 0) {
-      console.log('لم يتم العثور على بيانات في السيرفر. رفع البيانات المحلية...');
-      
-      try {
-        // تحضير البيانات للرفع - تأكد من وجود حقل created_at و createdAt
-        const preparedData = localData.map((product: any) => {
-          if (!product.created_at && product.createdAt) {
-            product.created_at = product.createdAt;
-          } else if (!product.createdAt && product.created_at) {
-            product.createdAt = product.created_at;
-          } else if (!product.created_at && !product.createdAt) {
-            const date = new Date().toISOString();
-            product.created_at = date;
-            product.createdAt = date;
-          }
-          return product;
-        });
-
-        // حذف أي بيانات موجودة في السيرفر
-        await supabase.from('products').delete().not('id', 'is', null);
-        
-        // تنظيف البيانات
-        const uniqueProducts = preparedData.filter((p: any, index: number, self: any[]) => 
-          index === self.findIndex((t: any) => t.id === p.id)
-        );
-        
-        // تحويل البيانات إلى تنسيق قاعدة البيانات
-        const dbProducts = uniqueProducts.map((product: any) => {
-          const dbProduct = mapAppModelToDatabase(product);
-          
-          if (dbProduct && dbProduct.created_at instanceof Date) {
-            dbProduct.created_at = dbProduct.created_at.toISOString();
-          }
-          
-          return dbProduct || {};
-        });
-        
-        // رفع البيانات المحلية
-        const { data: upsertedProducts, error: upsertError } = await supabase
-          .from('products')
-          .upsert(dbProducts, {
-            onConflict: 'id',
-            ignoreDuplicates: false // نريد تحديث السجلات الموجودة
-          })
-          .select(); // استخدام select() بدلاً من returning في الخيارات
-        
-        if (upsertError) {
-          console.error('فشل في تحديث/إضافة المنتجات:', upsertError);
-          
-          // حفظ البيانات محلياً على أي حال
-          localStorage.setItem('products', JSON.stringify(uniqueProducts));
-          await saveData('products', uniqueProducts);
-          
-          return {
-            success: false,
-            message: `تم الحفظ محلياً فقط. فشل المزامنة: ${upsertError.message}`
-          };
-        }
-        
-        console.log(`تم تحديث/إضافة ${dbProducts.length} منتج بنجاح`);
-        
-        // ⚠️ بعد upsert، نجلب كل البيانات من السيرفر بما في ذلك السجلات التي كانت موجودة من قبل
-        // هذا يضمن أن نحصل على جميع السجلات، وليس فقط تلك التي تم upsert لها
-        const { data: allCurrentProducts, error: fetchError } = await supabase
-          .from('products')
-          .select('*')
-          .eq('is_deleted', false) // نجلب فقط السجلات غير المحذوفة
-          .order('created_at', { ascending: false });
-        
-        if (fetchError) {
-          console.error('فشل في جلب جميع المنتجات بعد التحديث:', fetchError);
-          // نستمر بالبيانات التي قمنا بإرسالها على الأقل
-        }
-        
-        // تحويل البيانات المسترجعة من السيرفر إلى صيغة التطبيق
-        const finalProducts = allCurrentProducts ? 
-          allCurrentProducts.map(mapDatabaseToAppModel) : 
-          uniqueProducts; // استخدام البيانات المحلية إذا فشل جلب البيانات من السيرفر
-        
-        console.log(`تم استرجاع ${finalProducts.length} منتج من السيرفر بعد التحديث`);
-        
-        // تحديث الطابع الزمني للمزامنة
-        lastSyncTimestamp = Date.now();
-        localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp.toString());
-        
-        // حفظ في التخزين المحلي أيضاً للتأكد من التزامن
-        localStorage.setItem('products', JSON.stringify(finalProducts));
-        await saveData('products', finalProducts);
-        
-        // إطلاق حدث لإبلاغ التطبيق بتغيير البيانات
-        const event = new CustomEvent('customStorageChange', {
-          detail: { type: 'products', source: 'server' }
-        });
-        window.dispatchEvent(event);
-        
-        return finalProducts;
-      } catch (error) {
-        console.error('خطأ في رفع البيانات المحلية إلى السيرفر:', error);
-        // محاولة الحفظ محلياً على الأقل
-        try {
-          localStorage.setItem('products', JSON.stringify(localData));
-          await saveData('products', localData);
-          console.log('تم حفظ البيانات محلياً على الرغم من فشل المزامنة');
-        } catch (localError) {
-          console.error('فشل حتى في الحفظ المحلي:', localError);
-        }
-        
-        return localData;
-      }
-    }
-    
-    // لا توجد بيانات في أي مكان
-    console.log('لا توجد بيانات محلية أو على السيرفر');
-    return null;
-  } catch (error) {
-    console.error('خطأ في syncProductsFromSupabase:', error);
-    throw error;
-  }
-}
+// isOnline function moved to supabase-client.ts
 
 // إجبار تحديث البيانات من السيرفر
 export async function forceRefreshFromServer() {
@@ -533,33 +309,50 @@ export async function forceRefreshFromServer() {
       return null;
     }
     
-    const { data, error } = await supabase
+    // جلب المنتجات من الخادم
+    const { data: productsData, error: productsError } = await supabase
       .from('products')
       .select('*')
       .order('created_at', { ascending: false });
     
-    if (error) {
-      console.error('خطأ في تحميل البيانات من السيرفر:', error);
-      throw error;
+    if (productsError) {
+      console.error('خطأ في تحميل البيانات من السيرفر:', productsError);
+      throw productsError;
     }
     
-    if (!data || data.length === 0) {
+    if (!productsData || productsData.length === 0) {
       console.log('لا توجد بيانات في السيرفر');
       return null;
     }
     
-    console.log('تم تحميل البيانات بنجاح من السيرفر:', data.length);
+    console.log('تم تحميل البيانات بنجاح من السيرفر:', productsData.length);
+    
+    // جلب علاقات المنتجات بالفئات
+    const { data: productCategoriesData, error: categoriesError } = await supabase
+      .from('product_categories')
+      .select('*');
+    
+    if (categoriesError) {
+      console.error('خطأ في تحميل علاقات المنتجات بالفئات:', categoriesError);
+      // استمر حتى لو فشل جلب الفئات
+    }
     
     // طباعة البيانات المستلمة من السيرفر للتشخيص
-    console.log('عينة من بيانات السيرفر:', data.slice(0, 2));
+    console.log('عينة من بيانات المنتجات من السيرفر:', productsData.slice(0, 2));
+    console.log('عينة من علاقات المنتجات بالفئات:', productCategoriesData?.slice(0, 5) || []);
     
     // تحويل البيانات إلى نموذج التطبيق مع التأكد من صحة القيم
-    const appModels = data.map(item => {
+    const transformedModels = productsData.map(item => {
       // تحويل البيانات من تنسيق قاعدة البيانات إلى تنسيق التطبيق
       const model = mapDatabaseToAppModel(item);
       
+      // إضافة علاقات الفئات للمنتج
+      const productCategories = productCategoriesData?.filter(pc => pc.product_id === item.id) || [];
+      const categoryIds = productCategories.map(pc => pc.category_id);
+      
       // طباعة نتيجة التحويل للتشخيص
       console.log('نتيجة التحويل من قاعدة البيانات:', model);
+      console.log('فئات المنتج:', item.id, categoryIds);
       
       // التأكد من وجود جميع الحقول المطلوبة وبالأنواع الصحيحة
       const validatedModel = {
@@ -577,7 +370,10 @@ export async function forceRefreshFromServer() {
         isNew: !!model?.isNew,
         createdAt: model?.createdAt || new Date().toISOString(),
         created_at: model?.createdAt || new Date().toISOString(),
-        updated_at: model?.updated_at || new Date().toISOString()
+        updated_at: model?.updated_at || new Date().toISOString(),
+        // إضافة الفئات إلى المنتج
+        categoryId: model?.categoryId || '',
+        selectedCategories: categoryIds
       };
       
       // طباعة النموذج النهائي المتحقق منه للتشخيص
@@ -586,246 +382,34 @@ export async function forceRefreshFromServer() {
       return validatedModel;
     });
     
-    // تحديث البيانات المحلية
-    localStorage.setItem('products', JSON.stringify(appModels));
-    try {
-      await saveData('products', appModels);
-    } catch (e) {
-      console.error('خطأ في حفظ البيانات في التخزين الدائم:', e);
-    }
-    
     // تحديث الطابع الزمني للمزامنة
     lastSyncTimestamp = Date.now();
-    localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp.toString());
+    try {
+      localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp.toString());
+    } catch (error) {
+      console.error('خطأ في حفظ وقت المزامنة:', error);
+    }
     
-    // إعلام التطبيق بالتغييرات بضمان التنفيذ بعد التخزين
-    setTimeout(() => {
-      if (typeof window !== 'undefined') {
-        try {
-          window.dispatchEvent(new Event('storage'));
-          window.dispatchEvent(new CustomEvent('customStorageChange', { 
-            detail: { type: 'products', timestamp: Date.now(), source: 'server' }
-          }));
-          console.log('تم إرسال إشعارات تحديث البيانات بنجاح');
-        } catch (e) {
-          console.error('خطأ أثناء إرسال إشعارات تحديث البيانات:', e);
-        }
-      }
-    }, 100);
+    // حفظ البيانات في التخزين المحلي
+    try {
+      localStorage.setItem('products', JSON.stringify(transformedModels));
+      saveData('products', transformedModels);
+      console.log('تم حفظ البيانات في التخزين المحلي');
+    } catch (error) {
+      console.error('خطأ في حفظ البيانات في التخزين المحلي:', error);
+    }
     
-    return appModels;
+    // إرسال حدث لإبلاغ التطبيق بتغيير البيانات
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('customStorageChange', { 
+        detail: { type: 'products', timestamp: Date.now(), source: 'server' } 
+      }));
+    }
+    
+    return transformedModels;
   } catch (error) {
     console.error('خطأ في forceRefreshFromServer:', error);
     throw error;
   }
 }
-
-// وظيفة للتحقق من الاتصال بالإنترنت
-export function isOnline(): boolean {
-  return typeof navigator !== 'undefined' && navigator.onLine;
-}
-
-// دالة للتحقق من وجود جدول المنتجات وإنشائه أو تحديثه إذا لزم الأمر
-export async function createOrUpdateProductsTable() {
-  try {
-    console.log('التحقق من وجود جدول المنتجات...');
-    
-    // بدلاً من التحقق من وجود الجدول باستخدام استعلام SQL،
-    // سنحاول قراءة البيانات من الجدول لنرى ما إذا كان موجوداً
-    const { data, error } = await supabase
-      .from('products')
-      .select('id')
-      .limit(1);
-    
-    if (error) {
-      console.log('خطأ في الوصول إلى جدول المنتجات، قد يكون الجدول غير موجود أو هناك مشكلة في الصلاحيات');
-      console.log('محاولة إنشاء الجدول سيتم تجاهلها، سنستمر بالعمل مع التخزين المحلي فقط');
-      
-      // هنا نفترض أن مشكلة الوصول للجدول هي مشكلة صلاحيات أو أن الجدول غير موجود
-      // في بيئة Supabase، إنشاء الجداول يجب أن يتم من لوحة التحكم، وليس برمجياً في معظم الحالات
-      // لذلك سنكتفي بتسجيل الخطأ والاستمرار بالعمل بالتخزين المحلي
-      
-      return false;
-    }
-    
-    // إذا وصلنا إلى هنا، فالجدول موجود بالفعل
-    console.log('جدول المنتجات موجود ويمكن الوصول إليه');
-    return true;
-  } catch (error) {
-    console.error('خطأ في createOrUpdateProductsTable:', error);
-    // نعيد false لنشير إلى أننا سنعتمد على التخزين المحلي فقط
-    return false;
-  }
-}
-
-// دالة لإعادة ضبط جدول المنتجات وحذف جميع المنتجات ثم إعادة رفعها
-export async function resetAndSyncProducts(products: any[]) {
-  if (!isOnline()) {
-    console.error('لا يوجد اتصال بالإنترنت. لا يمكن إعادة ضبط المنتجات.');
-    return {
-      success: false,
-      message: 'لا يوجد اتصال بالإنترنت. تم الحفظ محلياً فقط.'
-    };
-  }
-
-  console.log('بدء إعادة ضبط ومزامنة المنتجات...');
-  console.log(`عدد المنتجات المطلوب مزامنتها: ${products.length}`);
-  
-  try {
-    // التحقق من وجود الجدول والصلاحيات أولاً
-    const tableExists = await createOrUpdateProductsTable();
-    
-    if (!tableExists) {
-      console.log('جدول المنتجات غير موجود أو هناك مشكلة في الوصول إليه. سيتم الحفظ محلياً فقط.');
-      return {
-        success: false,
-        message: 'جدول المنتجات غير موجود أو هناك مشكلة في الوصول إليه. تم الحفظ محلياً فقط.'
-      };
-    }
-    
-    // لا حاجة لتحميل البيانات الموجودة من السيرفر عند حذف منتج
-    // سنستخدم المنتجات المحلية المُحدثة (بعد الحذف) فقط
-    
-    // بدلاً من الدمج، نستخدم البيانات المحلية الحالية فقط
-    const productsToSave = [...products];
-    console.log(`عدد المنتجات التي سيتم حفظها: ${productsToSave.length}`);
-    
-    // تحضير البيانات للإرسال
-    const dbProducts = productsToSave.map(product => {
-      // طباعة القيم للتشخيص
-      console.log('تحضير المنتج للإرسال إلى السيرفر:', {
-        id: product.id,
-        name: product.name,
-        productCode: product.productCode,
-        boxQuantity: product.boxQuantity,
-        piecePrice: product.piecePrice
-      });
-      
-      const now = new Date().toISOString();
-      return {
-        id: product.id || ('new-' + Date.now() + Math.random().toString(36).substring(2, 9)),
-        name: product.name || 'منتج بدون اسم',
-        product_code: product.productCode || '',
-        // استخدام التحقق الصريح للقيم الرقمية
-        box_quantity: typeof product.boxQuantity === 'number' ? product.boxQuantity : 0,
-        piece_price: typeof product.piecePrice === 'number' ? product.piecePrice : 0,
-        image_url: product.imageUrl || '',
-        is_new: product.isNew === true,
-        created_at: product.createdAt || now,
-        updated_at: new Date().toISOString(),
-        category_id: product.categoryId || null
-      };
-    });
-    
-    // حذف جميع البيانات الموجودة أولاً
-    const { error: deleteError } = await supabase
-      .from('products')
-      .delete()
-      .neq('id', 'dummy-id'); // هذا سيحذف كل شيء
-    
-    if (deleteError) {
-      console.error('فشل في حذف البيانات الموجودة:', deleteError);
-      // نستمر في العملية
-    }
-    
-    // إذا لم يكن هناك منتجات للإدراج، نعيد مصفوفة فارغة
-    if (dbProducts.length === 0) {
-      console.log('لا توجد منتجات للإدراج، تم حذف جميع المنتجات من السيرفر.');
-      return [];
-    }
-    
-    // إدراج جميع البيانات المدمجة
-    const { data: insertedProducts, error: insertError } = await supabase
-      .from('products')
-      .insert(dbProducts)
-      .select();
-    
-    if (insertError) {
-      console.error('فشل في إدراج البيانات في السيرفر:', insertError);
-      
-      // إعادة نتيجة الخطأ
-      return {
-        success: false,
-        message: insertError.message || 'فشل في إدراج البيانات في السيرفر'
-      };
-    }
-    
-    console.log('تم إدراج البيانات في السيرفر بنجاح:', insertedProducts?.length || 0);
-    
-    // تحويل البيانات المُدرجة إلى نموذج التطبيق
-    const updatedProducts = (insertedProducts || []).map(mapDatabaseToAppModel).filter(Boolean);
-    
-    // حفظ البيانات في التخزين المحلي
-    try {
-      if (typeof window !== 'undefined') {
-        const productsToStore = JSON.stringify(updatedProducts);
-        localStorage.setItem('products', productsToStore);
-        saveData('products', updatedProducts);
-        
-        // تحديث آخر وقت مزامنة
-        localStorage.setItem('lastSyncTimestamp', Date.now().toString());
-        lastSyncTimestamp = Date.now();
-        
-        // إطلاق حدث لإعلام بقية التطبيق بتغير البيانات
-        window.dispatchEvent(new CustomEvent('customStorageChange', {
-          detail: { type: 'products', source: 'server' }
-        }));
-      }
-    } catch (storageError) {
-      console.error('خطأ في حفظ البيانات المحدثة في التخزين المحلي:', storageError);
-    }
-    
-    return updatedProducts;
-  } catch (error) {
-    console.error('خطأ غير متوقع أثناء مزامنة المنتجات:', error);
-    
-    // تسجيل وإعادة إرسال الخطأ بتنسيق موحد
-    return logSupabaseError(error);
-  }
-}
-
-// ضمان وجود bucket التخزين عند بدء التطبيق
-export async function ensureStorageBucketExists() {
-  if (typeof window === 'undefined') {
-    // لا نريد تنفيذ هذا على جانب العميل
-    return;
-  }
-
-  try {
-    console.log('Checking storage bucket existence...');
-    
-    // التحقق من وجود الـ bucket
-    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-    
-    if (listError) {
-      console.error('Error listing buckets:', listError);
-      return;
-    }
-    
-    const bucketExists = buckets.some(bucket => bucket.name === 'product-images');
-    let bucketCreated = false;
-    
-    // إنشاء bucket إذا لم يكن موجودًا
-    if (!bucketExists) {
-      console.log('Creating product-images bucket...');
-      const { error: createError } = await supabase.storage
-        .createBucket('product-images', {
-          public: true,
-          fileSizeLimit: 10485760, // 10 MB
-          allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-        });
-
-      if (createError) {
-        console.error('Error creating bucket:', createError);
-        throw new Error(`فشل في إنشاء bucket: ${createError.message}`);
-      }
-
-      console.log('تم إنشاء bucket product-images بنجاح');
-      
-      // ملاحظة: الـ bucket يجب أن يكون عاماً بناءً على الخيارات المحددة عند الإنشاء
-      // API setPublic لم تعد مدعومة، يمكن التحقق من الإعدادات في لوحة التحكم في Supabase
-    }
-  } catch (error) {
-    console.error('Unexpected error ensuring storage bucket:', error);
-  }
-} 

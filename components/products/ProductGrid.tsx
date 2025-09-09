@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import ProductCard from './ProductCard';
 import { Product } from '@/types';
 import { 
   loadProductsFromSupabase, 
-  isOnline,
-  supabase
+  isOnline
 } from '@/lib/supabase';
+import { getProductsByCategoryFromSupabase } from '@/lib/data';
+import { supabase } from '@/lib/supabase-client';
+import RealtimeManager from '@/lib/realtime-manager';
 import { FiSearch } from 'react-icons/fi';
 
 interface ProductGridProps {
@@ -17,19 +19,41 @@ interface ProductGridProps {
   limit?: number;
   filterByCategory?: string;
   searchEnabled?: boolean;
+  searchQuery?: string;
 }
 
 // يتم عرض 8 منتجات في البداية، ثم تحميل المزيد عند التمرير
 const INITIAL_PRODUCTS_COUNT = 8;
 const PRODUCTS_PER_PAGE = 8;
 
-export default function ProductGrid({
+// Optimized debounce helper with stable reference
+const debounceCache = new Map<string, NodeJS.Timeout>();
+const debounce = (key: string, func: Function, wait: number) => {
+  return (...args: any[]) => {
+    const existingTimeout = debounceCache.get(key);
+    if (existingTimeout) clearTimeout(existingTimeout);
+    
+    const timeout = setTimeout(() => {
+      debounceCache.delete(key);
+      func(...args);
+    }, wait);
+    
+    debounceCache.set(key, timeout);
+  };
+};
+
+// Use centralized realtime manager
+const realtimeManager = RealtimeManager.getInstance();
+
+// مكون محسن مع React.memo
+function ProductGrid({
   title,
   showViewAll = false,
   viewAllLink = '/products',
   limit,
   filterByCategory,
   searchEnabled = false,
+  searchQuery = '',
 }: ProductGridProps) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [visibleProducts, setVisibleProducts] = useState<Product[]>([]);
@@ -38,104 +62,143 @@ export default function ProductGrid({
   const [hasMore, setHasMore] = useState(true);
   const [isOffline, setIsOffline] = useState(!isOnline());
   const [productPage, setProductPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [internalSearchQuery, setInternalSearchQuery] = useState<string>(searchQuery);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const searchFormRef = useRef<HTMLFormElement>(null);
   
   const loadProductsDataRef = useRef<() => Promise<void>>();
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const isInitialLoadRef = useRef<boolean>(true);
+  const updateInProgressRef = useRef<boolean>(false);
+  const componentIdRef = useRef<string>(`product-grid-${Math.random().toString(36).substring(2, 9)}`);
+  const isMountedRef = useRef<boolean>(true);
+
+  // تحديث internalSearchQuery عندما يتغير searchQuery من الخارج
+  useEffect(() => {
+    setInternalSearchQuery(searchQuery);
+  }, [searchQuery]);
+
+  // تنظيف عند إلغاء تركيب المكون
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, []);
 
   // تحميل المنتجات من السيرفر
   useEffect(() => {
     const loadProductsData = async () => {
-      // Reset state at the beginning
-      setLoading(true);
-      
-      // Check if we're offline first
-      if (!isOnline()) {
-        setIsOffline(true);
-        setLoading(false);
-        return;
-      }
-      
-      // We're online, reset offline state
-      setIsOffline(false);
-      
       try {
-        console.log('Loading products from Supabase...');
-        const serverProducts = await loadProductsFromSupabase();
+        setLoading(true);
+        updateInProgressRef.current = true;
         
-        if (serverProducts && serverProducts.length > 0) {
-          console.log('Successfully loaded products from server:', serverProducts.length);
+        let processedProducts: Product[] = [];
+        
+        if (filterByCategory) {
+          console.log('Filtering by category:', filterByCategory);
           
-          // Process the products - add packPrice and boxPrice
-          let processedProducts = serverProducts
-            .filter(product => product !== null)
-            .map(product => ({
-              ...product,
-              packPrice: product.piecePrice * 6, // مثال: علبة تحتوي على 6 قطع
-              boxPrice: product.piecePrice * product.boxQuantity
-            })) as Product[];
+          // استخدام دالة متخصصة لجلب المنتجات حسب الفئة باستخدام العلاقة متعددة إلى متعددة
+          const categoryProducts = await getProductsByCategoryFromSupabase(filterByCategory);
           
-          // Apply category filter if needed
-          if (filterByCategory) {
-            processedProducts = processedProducts.filter((product: Product) => 
-              product.categoryId && String(product.categoryId) === String(filterByCategory)
-            );
-            console.log('Filtered by category. Remaining count:', processedProducts.length);
+          if (categoryProducts && categoryProducts.length > 0) {
+            // معالجة المنتجات - إضافة packPrice و boxPrice
+            processedProducts = categoryProducts
+              .filter(product => product !== null)
+              .map(product => ({
+                ...product,
+                packPrice: product.piecePrice * 6, // مثال: علبة تحتوي على 6 قطع
+                boxPrice: product.piecePrice * product.boxQuantity
+              })) as Product[];
+          } else {
+            processedProducts = [];
           }
-          
-          // Filter new products if we're on the new products page
-          if (window.location.pathname.includes('/products/new')) {
-            const currentDate = new Date();
-            const newProductDays = 14; // Hard-coded instead of from settings
-            
-            processedProducts = processedProducts.filter((product: Product) => {
-              if (!product.createdAt || !product.isNew) return false;
-              
-              const createdDate = new Date(product.createdAt);
-              const diffTime = Math.abs(currentDate.getTime() - createdDate.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              
-              return diffDays <= newProductDays;
-            });
-            console.log('Filtered new products by date. Remaining count:', processedProducts.length);
-          }
-          
-          // Sort products by date (newest first)
-          processedProducts.sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return dateB - dateA; 
-          });
-          
-          // Apply limit if specified
-          if (limit && limit > 0) {
-            processedProducts = processedProducts.slice(0, limit);
-            console.log('Applied limit. Final count:', processedProducts.length);
-          }
-          
-          // تعيين كل المنتجات
-          setAllProducts(processedProducts);
-          setFilteredProducts(processedProducts);
-          
-          // تعيين المنتجات المرئية في الصفحة الأولى
-          const initialProducts = processedProducts.slice(0, INITIAL_PRODUCTS_COUNT);
-          setVisibleProducts(initialProducts);
-          
-          // تحديد ما إذا كان هناك المزيد من المنتجات للتحميل
-          setHasMore(processedProducts.length > INITIAL_PRODUCTS_COUNT);
-          
-          // إعادة تعيين رقم الصفحة
-          setProductPage(1);
         } else {
-          console.log('No products found on server');
-          setAllProducts([]);
-          setFilteredProducts([]);
-          setVisibleProducts([]);
-          setHasMore(false);
+          // جلب كل المنتجات كالمعتاد إذا لم تكن هناك تصفية حسب الفئة
+          const serverProducts = await loadProductsFromSupabase();
+          
+          if (serverProducts && serverProducts.length > 0) {
+            // Process the products - add packPrice and boxPrice
+            processedProducts = serverProducts
+              .filter(product => product !== null)
+              .map(product => ({
+                ...product,
+                packPrice: product.piecePrice * 6, // مثال: علبة تحتوي على 6 قطع
+                boxPrice: product.piecePrice * product.boxQuantity
+              })) as Product[];
+              
+            // جلب علاقات المنتجات والفئات
+            const { data: productCategoriesData, error: categoriesError } = await supabase
+              .from('product_categories')
+              .select('*');
+              
+            if (categoriesError) {
+              console.error('Error fetching product categories:', categoriesError);
+            } else if (productCategoriesData) {
+              // إضافة الفئات إلى المنتجات
+              processedProducts = processedProducts.map(product => {
+                const categoryIds = productCategoriesData
+                  .filter(pc => pc.product_id === product.id)
+                  .map(pc => pc.category_id);
+                
+                return {
+                  ...product,
+                  selectedCategories: categoryIds
+                };
+              });
+            }
+          } else {
+            processedProducts = [];
+          }
         }
+
+        // تصفية المنتجات الجديدة محسنة
+        if (typeof window !== 'undefined' && window.location.pathname.includes('/products/new')) {
+          const fourteenDaysAgo = Date.now() - (14 * 24 * 60 * 60 * 1000);
+          processedProducts = processedProducts.filter((product: Product) => {
+            if (!product.createdAt || !product.isNew) return false;
+            const createdTime = new Date(product.createdAt).getTime();
+            return createdTime >= fourteenDaysAgo;
+          });
+        }
+        
+        // ترتيب محسن - باستخدام الرقم الزمني مباشرة
+        processedProducts.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
+        
+        // Apply limit if specified
+        if (limit && limit > 0) {
+          processedProducts = processedProducts.slice(0, limit);
+        }
+        
+        console.log('Products loaded:', {
+          total: processedProducts.length,
+          initial: INITIAL_PRODUCTS_COUNT,
+          hasMore: processedProducts.length > INITIAL_PRODUCTS_COUNT
+        });
+        
+        // تعيين كل المنتجات
+        setAllProducts(processedProducts);
+        setFilteredProducts(processedProducts);
+        
+        // تعيين المنتجات المرئية في الصفحة الأولى
+        const initialProducts = processedProducts.slice(0, INITIAL_PRODUCTS_COUNT);
+        setVisibleProducts(initialProducts);
+        
+        // تحديد ما إذا كان هناك المزيد من المنتجات للتحميل
+        const shouldHaveMore = processedProducts.length > INITIAL_PRODUCTS_COUNT;
+        console.log('Setting hasMore:', { shouldHaveMore, totalProducts: processedProducts.length, initialCount: INITIAL_PRODUCTS_COUNT });
+        setHasMore(shouldHaveMore);
+        
+        // إعادة تعيين رقم الصفحة
+        setProductPage(1);
       } catch (error) {
         console.error('Error loading products from server:', error);
         setAllProducts([]);
@@ -144,6 +207,8 @@ export default function ProductGrid({
         setHasMore(false);
       } finally {
         setLoading(false);
+        updateInProgressRef.current = false;
+        isInitialLoadRef.current = false;
       }
     };
     
@@ -158,10 +223,7 @@ export default function ProductGrid({
       setIsOffline(!online);
       
       if (online) {
-        console.log('Connection restored. Loading fresh data...');
         loadProductsData();
-      } else {
-        console.log('Connection lost. Showing offline message.');
       }
     };
     
@@ -176,162 +238,204 @@ export default function ProductGrid({
     };
   }, [limit, filterByCategory]);
 
-  // تطبيق البحث على المنتجات
-  useEffect(() => {
-    if (!allProducts || allProducts.length === 0) return;
-    
-    // طباعة بيانات المنتجات للتصحيح
-    console.log('All products for search:', allProducts.map(p => ({ id: p.id, name: p.name })));
-    
-    // تصفية المنتجات بناءً على استعلام البحث
-    let newFilteredProducts;
-    if (!searchQuery || searchQuery.trim() === '') {
-      // إذا كان البحث فارغًا، عرض جميع المنتجات
-      newFilteredProducts = [...allProducts];
-    } else {
-      // بحث عن المنتجات التي تطابق الاستعلام
-      const query = searchQuery.trim().toLowerCase();
-      console.log('Search query:', query);
+  // تطبيق البحث المحسن مع debouncing
+  const debouncedSearch = useMemo(() => {
+    return debounce('search', (query: string, products: Product[]) => {
+      if (!products || products.length === 0) return;
       
-      newFilteredProducts = allProducts.filter(product => {
-        // التحقق من وجود المنتج وحقل الاسم
-        if (!product || !product.name) {
-          console.log('Product or product name is undefined', product);
-          return false;
-        }
-        
-        const productName = product.name.toLowerCase();
-        const found = productName.includes(query);
-        
-        // طباعة نتائج البحث للتصحيح
-        console.log(`Product: ${product.name}, Match: ${found}`);
-        
-        return found;
-      });
-    }
-    
-    console.log('Filtered products:', newFilteredProducts.length);
-    
-    // تحديث قائمة المنتجات المصفاة
-    setFilteredProducts(newFilteredProducts);
-    
-    // تحديث المنتجات المرئية بالمنتجات المصفاة الجديدة
-    const initialVisible = newFilteredProducts.slice(0, INITIAL_PRODUCTS_COUNT);
-    setVisibleProducts(initialVisible);
-    
-    // تحديث المؤشرات الأخرى
-    setHasMore(newFilteredProducts.length > INITIAL_PRODUCTS_COUNT);
-    setProductPage(1);
-  }, [searchQuery, allProducts]);
+      let filtered;
+      if (!query || query.trim() === '') {
+        filtered = [...products];
+      } else {
+        const searchTerm = query.trim().toLowerCase();
+        filtered = products.filter(product => 
+          product?.name?.toLowerCase().includes(searchTerm)
+        );
+      }
+      
+      setFilteredProducts(filtered);
+      setVisibleProducts(filtered.slice(0, INITIAL_PRODUCTS_COUNT));
+      setHasMore(filtered.length > INITIAL_PRODUCTS_COUNT);
+      setProductPage(1);
+    }, 300);
+  }, []);
+  
+  useEffect(() => {
+    if (isInitialLoadRef.current) return;
+    debouncedSearch(internalSearchQuery, allProducts);
+  }, [internalSearchQuery, allProducts, debouncedSearch]);
 
   // إرسال نموذج البحث
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // طباعة استعلام البحث للتحقق من حدوث البحث بالفعل
-    console.log('Searching for:', searchQuery);
     // نقوم بالبحث مباشرة حيث أن useEffect المسؤول عن البحث سيعمل تلقائيًا
   };
 
   // تنظيف حقل البحث
   const clearSearch = () => {
-    setSearchQuery('');
+    setInternalSearchQuery('');
     if (searchFormRef.current) {
       searchFormRef.current.reset();
     }
   };
 
-  // دالة لتحميل المزيد من المنتجات
+  // دالة بسيطة لتحميل المزيد من المنتجات
   const loadMoreProducts = useCallback(() => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore || updateInProgressRef.current || !isMountedRef.current) {
+      console.log('LoadMore blocked:', { 
+        loadingMore, 
+        hasMore, 
+        updateInProgress: updateInProgressRef.current,
+        isMounted: isMountedRef.current 
+      });
+      return;
+    }
     
+    console.log('Starting loadMoreProducts...');
     setLoadingMore(true);
     
-    // حساب نطاق المنتجات الجديدة للتحميل
-    const startIndex = productPage * PRODUCTS_PER_PAGE;
-    const endIndex = startIndex + PRODUCTS_PER_PAGE;
-    
-    // الحصول على المنتجات الجديدة من القائمة المصفاة
-    const newProducts = filteredProducts.slice(startIndex, endIndex);
-    
-    // إضافة المنتجات الجديدة إلى القائمة المرئية
-    setVisibleProducts(prev => [...prev, ...newProducts]);
-    
-    // زيادة رقم الصفحة
-    setProductPage(prev => prev + 1);
-    
-    // التحقق مما إذا كان هناك المزيد من المنتجات
-    setHasMore(endIndex < filteredProducts.length);
-    
-    setLoadingMore(false);
-  }, [productPage, filteredProducts, loadingMore, hasMore]);
+    // استخدام requestAnimationFrame بدلاً من setTimeout لتحسين الأداء
+    requestAnimationFrame(() => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const currentVisibleCount = visibleProducts.length;
+      const startIndex = currentVisibleCount;
+      const endIndex = startIndex + PRODUCTS_PER_PAGE;
+      const newProducts = filteredProducts.slice(startIndex, endIndex);
+      
+      console.log('LoadMore Debug:', {
+        startIndex,
+        endIndex,
+        newProductsCount: newProducts.length,
+        totalFiltered: filteredProducts.length,
+        currentVisible: currentVisibleCount
+      });
+      
+      if (newProducts.length > 0) {
+        setVisibleProducts(prev => [...prev, ...newProducts]);
+        setHasMore(endIndex < filteredProducts.length);
+        setProductPage(prev => prev + 1);
+      } else {
+        console.log('No more products to load');
+        setHasMore(false);
+      }
+      
+      setLoadingMore(false);
+    });
+  }, [filteredProducts, loadingMore, hasMore, visibleProducts.length]);
 
   // إعداد مراقب التقاطع للتمرير اللانهائي
   useEffect(() => {
+    // التحقق من الشروط المطلوبة للمراقبة
+    if (!hasMore || loading || updateInProgressRef.current) {
+      return;
+    }
+
     // إزالة المراقب السابق إذا كان موجودًا
     if (observerRef.current) {
       observerRef.current.disconnect();
+      observerRef.current = null;
     }
     
-    // إنشاء مراقب جديد
+    // إنشاء مراقب جديد فقط إذا كان هناك منتجات أكثر للتحميل
+    const loadMoreElement = loadMoreRef.current;
+    if (!loadMoreElement) {
+      return;
+    }
+
     observerRef.current = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (entry.isIntersecting && hasMore && !loadingMore) {
+        console.log('Intersection Observer triggered:', {
+          isIntersecting: entry.isIntersecting,
+          hasMore,
+          loadingMore,
+          visibleCount: visibleProducts.length,
+          filteredCount: filteredProducts.length
+        });
+        
+        // التحقق من جميع الشروط قبل التحميل
+        if (entry.isIntersecting && hasMore && !loadingMore && !updateInProgressRef.current) {
           loadMoreProducts();
         }
       },
-      { threshold: 0.1 }
+      { 
+        threshold: 0.1,
+        rootMargin: '100px' // بدء التحميل قبل وصول المستخدم للعنصر ب 100px
+      }
     );
     
-    // بدء المراقبة إذا كان عنصر التحميل موجودًا
-    const loadMoreElement = loadMoreRef.current;
-    if (loadMoreElement) {
-      observerRef.current.observe(loadMoreElement);
-    }
+    observerRef.current.observe(loadMoreElement);
     
     // تنظيف عند الإلغاء
     return () => {
       if (observerRef.current) {
         observerRef.current.disconnect();
+        observerRef.current = null;
       }
     };
-  }, [loadMoreProducts, hasMore, loadingMore]);
+  }, [hasMore, loading, loadMoreProducts, visibleProducts.length, filteredProducts.length]);
 
-  // Set up Supabase Realtime subscription
-  useEffect(() => {
-    // Don't set up subscription if offline
-    if (isOffline) return;
-
-    console.log('Setting up Supabase Realtime subscription for products table');
+  // معالجات في الوقت الفعلي محسنة
+  const handleRealtimeChange = useCallback((payload: any) => {
+    if (isInitialLoadRef.current || updateInProgressRef.current) return;
     
-    // Create a channel for postgres_changes on the products table
-    const channel = supabase
-      .channel('product-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen for all events (INSERT, UPDATE, DELETE)
-          schema: 'public',
-          table: 'products'
-        },
-        (payload) => {
-          console.log('Received Realtime update:', payload.eventType, payload);
-          
-          // Call loadProductsData to refresh the data
-          if (loadProductsDataRef.current) {
-            console.log(`Product ${payload.eventType} detected. Reloading data...`);
-            loadProductsDataRef.current();
-          }
+    const { event } = payload;
+    
+    switch (event) {
+      case 'INSERT':
+        // إعادة تحميل للمنتجات الجديدة
+        if (loadProductsDataRef.current) {
+          loadProductsDataRef.current();
         }
-      )
-      .subscribe();
+        break;
+        
+      case 'UPDATE':
+        // تحديث محسن للمنتج المعدل
+        const updatedProduct = {
+          ...payload.new,
+          imageUrl: payload.new.image_url || payload.new.imageUrl || '',
+          packPrice: payload.new.piece_price ? payload.new.piece_price * 6 : 0,
+          boxPrice: payload.new.piece_price && payload.new.box_quantity ? 
+                    payload.new.piece_price * payload.new.box_quantity : 0
+        };
+        
+        setAllProducts(prev => 
+          prev.map(product => 
+            product.id === updatedProduct.id ? updatedProduct : product
+          )
+        );
+        
+        setVisibleProducts(prev => 
+          prev.map(product => 
+            product.id === updatedProduct.id ? updatedProduct : product
+          )
+        );
+        break;
+        
+      case 'DELETE':
+        const deletedId = payload.old?.id;
+        if (deletedId) {
+          setAllProducts(prev => prev.filter(product => product.id !== deletedId));
+          setVisibleProducts(prev => prev.filter(product => product.id !== deletedId));
+        }
+        break;
+    }
+  }, []);
+
+  // إعداد اشتراكات الوقت الفعلي المحسنة
+  useEffect(() => {
+    if (isOffline) return;
     
-    // Clean up subscription when component unmounts
+    const componentId = componentIdRef.current;
+    realtimeManager.subscribe(componentId, handleRealtimeChange);
+    
     return () => {
-      console.log('Unsubscribing from Supabase Realtime');
-      supabase.removeChannel(channel);
+      realtimeManager.unsubscribe(componentId);
     };
-  }, [isOffline]);
+  }, [isOffline, handleRealtimeChange]);
   
   // عرض رسالة التحميل
   if (loading) {
@@ -362,7 +466,7 @@ export default function ProductGrid({
   }
 
   // عرض رسالة إذا لم يتم العثور على منتجات تطابق البحث
-  if (searchQuery && filteredProducts.length === 0) {
+  if (internalSearchQuery && filteredProducts.length === 0) {
     return (
       <>
         {/* عرض حقل البحث دائمًا */}
@@ -375,12 +479,12 @@ export default function ProductGrid({
                 </div>
                 <input
                   type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={internalSearchQuery}
+                  onChange={(e) => setInternalSearchQuery(e.target.value)}
                   placeholder="ابحث عن منتج..."
                   className="w-full h-12 pr-12 pl-10 text-base text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-[#5D1F1F] focus:border-[#5D1F1F] outline-none"
                 />
-                {searchQuery && (
+                {internalSearchQuery && (
                   <button
                     type="button"
                     onClick={clearSearch}
@@ -395,7 +499,7 @@ export default function ProductGrid({
         )}
         
         <div className="text-center py-8">
-          <p className="text-gray-700">لم يتم العثور على منتجات تطابق "{searchQuery}"</p>
+          <p className="text-gray-700">لم يتم العثور على منتجات تطابق "{internalSearchQuery}"</p>
           <button 
             onClick={clearSearch}
             className="mt-4 bg-[#5D1F1F] hover:bg-[#4a1919] text-white px-4 py-2 rounded-lg transition-colors"
@@ -410,7 +514,7 @@ export default function ProductGrid({
   // عرض المنتجات مع منطقة البحث
   return (
     <>
-      {/* حقل البحث مع تصميم محسن مطابق للصورة */}
+      {/* حقل البحث محسن */}
       {searchEnabled && (
         <div className="mb-8">
           <form ref={searchFormRef} onSubmit={handleSubmit} className="flex items-center max-w-md mx-auto">
@@ -420,12 +524,12 @@ export default function ProductGrid({
               </div>
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={internalSearchQuery}
+                onChange={(e) => setInternalSearchQuery(e.target.value)}
                 placeholder="ابحث عن منتج..."
                 className="w-full h-12 pr-12 pl-10 text-base text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-[#5D1F1F] focus:border-[#5D1F1F] outline-none"
               />
-              {searchQuery && (
+              {internalSearchQuery && (
                 <button
                   type="button"
                   onClick={clearSearch}
@@ -439,15 +543,19 @@ export default function ProductGrid({
         </div>
       )}
       
-      {/* عرض المنتجات المصفاة */}
+      {/* عرض المنتجات بشكل محسن */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {visibleProducts.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard 
+            key={`${product.id}-${product.name}`} 
+            product={product}
+            priority={visibleProducts.indexOf(product) < 4}
+          />
         ))}
       </div>
       
       {/* عنصر محدد التحميل - يظهر فقط إذا كان هناك المزيد من المنتجات */}
-      {hasMore && (
+      {hasMore && visibleProducts.length < filteredProducts.length && (
         <div ref={loadMoreRef} className="flex justify-center pt-8">
           {loadingMore ? (
             <div className="spinner"></div>
@@ -456,6 +564,23 @@ export default function ProductGrid({
           )}
         </div>
       )}
+      
+      {/* رسالة عند انتهاء جميع المنتجات */}
+      {!hasMore && visibleProducts.length > 0 && filteredProducts.length > INITIAL_PRODUCTS_COUNT && (
+        <div className="flex justify-center pt-8">
+          <span className="text-gray-500 text-sm">تم عرض جميع المنتجات ({visibleProducts.length} منتج)</span>
+        </div>
+      )}
     </>
   );
-} 
+}
+
+// تصدير محسن مع React.memo
+export default memo(ProductGrid, (prevProps, nextProps) => {
+  return (
+    prevProps.filterByCategory === nextProps.filterByCategory &&
+    prevProps.searchQuery === nextProps.searchQuery &&
+    prevProps.limit === nextProps.limit &&
+    prevProps.title === nextProps.title
+  );
+}); 

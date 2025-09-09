@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import { Product } from '@/types';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { FiPlus, FiMinus, FiEdit } from 'react-icons/fi';
 import { useCart } from '@/components/CartProvider';
 import { useAuth } from '@/components/AuthProvider';
@@ -10,9 +10,15 @@ interface ProductCardProps {
   priority?: boolean;
 }
 
-export default function ProductCard({ product, priority = false }: ProductCardProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageSrc, setImageSrc] = useState<string>('');
+// مكون محسن مع React.memo لمنع إعادة العرض الغير ضرورية
+function ProductCard({ product, priority = false }: ProductCardProps) {
+  // تحسين الحالة - تجميع متعلق بالصورة
+  const [imageState, setImageState] = useState({
+    loaded: false,
+    src: ''
+  });
+  
+  // حالة الكمية والملاحظات
   const [quantity, setQuantity] = useState(1);
   const [showQuantitySelector, setShowQuantitySelector] = useState(false);
   const [showNotesEditor, setShowNotesEditor] = useState(false);
@@ -96,11 +102,11 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
         }
         
         // تعيين مصدر الصورة بعد التحقق من cache
-        setImageSrc(product.imageUrl);
+        setImageState(prev => ({ ...prev, src: product.imageUrl }));
       } catch (error) {
         console.error('Error with cache:', error);
         // في حالة الخطأ، استخدم الرابط المباشر
-        setImageSrc(product.imageUrl);
+        setImageState(prev => ({ ...prev, src: product.imageUrl }));
       }
     };
     
@@ -248,25 +254,25 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
   return (
     <div className="bg-[#D7D7D7] rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
       <div className="relative h-64 md:h-72">
-        {imageSrc ? (
+        {imageState.src ? (
           <>
             {/* استخدام صورة مؤقتة للتحميل (placeholder) */}
-            {!imageLoaded && (
+            {!imageState.loaded && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
                 <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
               </div>
             )}
             
             <Image
-              src={imageSrc}
+              src={imageState.src}
               alt={product.name}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className={`object-contain p-2 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              className={`object-contain p-2 transition-opacity duration-300 ${imageState.loaded ? 'opacity-100' : 'opacity-0'}`}
               priority={priority}
               quality={85}
               loading={priority ? 'eager' : 'lazy'}
-              onLoad={() => setImageLoaded(true)}
+              onLoad={() => setImageState(prev => ({ ...prev, loaded: true }))}
             />
           </>
         ) : (
@@ -428,4 +434,17 @@ export default function ProductCard({ product, priority = false }: ProductCardPr
       </div>
     </div>
   );
-} 
+}
+
+// تصدير محسن مع React.memo لمنع إعادة العرض الغير ضرورية
+export default memo(ProductCard, (prevProps, nextProps) => {
+  // مقارنة مخصصة لتحسين الأداء
+  return (
+    prevProps.product.id === nextProps.product.id &&
+    prevProps.product.name === nextProps.product.name &&
+    prevProps.product.piecePrice === nextProps.product.piecePrice &&
+    prevProps.product.imageUrl === nextProps.product.imageUrl &&
+    prevProps.product.boxQuantity === nextProps.product.boxQuantity &&
+    prevProps.priority === nextProps.priority
+  );
+}); 

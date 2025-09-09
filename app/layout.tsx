@@ -7,6 +7,7 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { CartProvider } from '@/components/CartProvider';
 import UserChat from '@/components/chat/UserChat';
 import { Toaster } from 'react-hot-toast';
+import ScrollToTopButton from '@/components/layout/ScrollToTopButton';
 
 export const metadata: Metadata = {
   title: 'El Farouk Group | كتالوج المنتجات',
@@ -29,6 +30,7 @@ export default function RootLayout({
               <main className="flex-grow">{children}</main>
               <UserChat />
               <Footer />
+              <ScrollToTopButton />
               <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
             </CartProvider>
           </AuthProvider>

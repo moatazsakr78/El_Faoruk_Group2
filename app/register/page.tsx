@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase, signUp } from '@/lib/auth'; // استيراد عميل supabase وفنكشن التسجيل
+import { signUp } from '@/lib/auth'; // استيراد فنكشن التسجيل
+import { supabase } from '@/lib/supabase-client'; // استيراد عميل supabase
 
 export default function Register() {
   const [email, setEmail] = useState('');
