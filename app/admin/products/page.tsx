@@ -474,20 +474,67 @@ export default function AdminProducts() {
     }
 
     try {
-      // Primero obtenemos el producto para saber si tiene imagen
-      const productToDelete = products.find(p => p.id === id);
-      
-      // Si el producto tiene una URL de imagen que apunta a Supabase Storage
-      if (productToDelete?.imageUrl && productToDelete.imageUrl.includes('supabase.co/storage')) {
-        try {
-          // Intentamos eliminar la imagen antes de eliminar el producto
-          await deleteProductImage(productToDelete.imageUrl);
-        } catch (imageError) {
-          console.error('خطأ في حذف صورة المنتج:', imageError);
-          // Continuamos con la eliminación del producto incluso si falla la eliminación de la imagen
+      // أولاً: التحقق من وجود المنتج في طلبات موجودة
+      const { data: orderItems, error: checkError } = await supabase
+        .from('order_items')
+        .select('id, order_id')
+        .eq('product_id', id);
+
+      if (checkError) {
+        console.error('خطأ في فحص ارتباط المنتج بالطلبات:', checkError);
+        setNotification({
+          message: 'خطأ في التحقق من حالة المنتج. يرجى المحاولة مرة أخرى.',
+          type: 'error'
+        });
+        setTimeout(() => setNotification(null), 5000);
+        return false;
+      }
+
+      // إذا كان المنتج مستخدم في طلبات، حذف ارتباطاته أولاً
+      if (orderItems && orderItems.length > 0) {
+        // حذف ارتباطات المنتج من order_items أولاً
+        const { error: deleteOrderItemsError } = await supabase
+          .from('order_items')
+          .delete()
+          .eq('product_id', id);
+
+        if (deleteOrderItemsError) {
+          console.error('خطأ في حذف ارتباطات المنتج من الطلبات:', deleteOrderItemsError);
+          setNotification({
+            message: 'خطأ في حذف ارتباطات المنتج من الطلبات. يرجى المحاولة مرة أخرى.',
+            type: 'error'
+          });
+          setTimeout(() => setNotification(null), 5000);
+          return false;
         }
       }
 
+      // الحصول على المنتج لمعرفة ما إذا كان له صورة
+      const productToDelete = products.find(p => p.id === id);
+      
+      // حذف علاقات الفئات لتجنب مشاكل foreign key constraints
+      const { error: deleteRelationsError } = await supabase
+        .from('product_categories')
+        .delete()
+        .eq('product_id', id);
+        
+      if (deleteRelationsError) {
+        console.error('خطأ في حذف علاقات الفئات:', deleteRelationsError);
+        // نستمر رغم الخطأ لأن الجدول قد لا يكون موجوداً
+      }
+      
+      // إذا كان المنتج يحتوي على صورة في Supabase Storage
+      if (productToDelete?.imageUrl && productToDelete.imageUrl.includes('supabase.co/storage')) {
+        try {
+          // محاولة حذف الصورة قبل حذف المنتج
+          await deleteProductImage(productToDelete.imageUrl);
+        } catch (imageError) {
+          console.error('خطأ في حذف صورة المنتج:', imageError);
+          // نستمر مع حذف المنتج حتى لو فشل حذف الصورة
+        }
+      }
+
+      // حذف المنتج من جدول products
       const { error } = await supabase
         .from('products')
         .delete()
@@ -495,8 +542,17 @@ export default function AdminProducts() {
 
       if (error) {
         console.error('خطأ في حذف المنتج:', error);
+        let errorMessage = 'خطأ في حذف المنتج';
+        
+        // تحسين رسائل الخطأ
+        if (error.code === '23503') {
+          errorMessage = 'لا يمكن حذف هذا المنتج لأنه مرتبط ببيانات أخرى في النظام';
+        } else {
+          errorMessage = `خطأ في حذف المنتج: ${error.message}`;
+        }
+        
         setNotification({
-          message: `خطأ في حذف المنتج: ${error.message}`,
+          message: errorMessage,
           type: 'error'
         });
         setTimeout(() => setNotification(null), 5000);
@@ -504,6 +560,11 @@ export default function AdminProducts() {
       }
       
       console.log('تم حذف المنتج بنجاح، معرف:', id);
+      setNotification({
+        message: 'تم حذف المنتج بنجاح',
+        type: 'success'
+      });
+      setTimeout(() => setNotification(null), 3000);
       return true;
     } catch (error: any) {
       console.error('خطأ غير متوقع:', error);
@@ -1008,9 +1069,6 @@ export default function AdminProducts() {
                 سعر الجملة
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                الفئات
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 الإجراءات
               </th>
             </tr>
@@ -1051,22 +1109,6 @@ export default function AdminProducts() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {product.wholesalePrice ? `${product.wholesalePrice} جنيه` : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex flex-wrap gap-1">
-                    {product.selectedCategories && product.selectedCategories.length > 0 ? (
-                      product.selectedCategories.map(categoryId => {
-                        const category = categories.find(c => c.id === categoryId);
-                        return category ? (
-                          <span key={categoryId} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
-                            {category.name}
-                          </span>
-                        ) : null;
-                      })
-                    ) : (
-                      <span className="text-gray-400 text-xs">لا توجد فئات</span>
-                    )}
-                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <div className="flex space-x-2 space-x-reverse">
@@ -1132,23 +1174,6 @@ export default function AdminProducts() {
               </div>
             </div>
             
-            <div className="mb-4">
-              <span className="font-medium text-gray-600 block mb-1">الفئات: </span>
-              <div className="flex flex-wrap gap-1">
-                {product.selectedCategories && product.selectedCategories.length > 0 ? (
-                  product.selectedCategories.map(categoryId => {
-                    const category = categories.find(c => c.id === categoryId);
-                    return category ? (
-                      <span key={categoryId} className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
-                        {category.name}
-                      </span>
-                    ) : null;
-                  })
-                ) : (
-                  <span className="text-gray-400 text-xs">لا توجد فئات</span>
-                )}
-              </div>
-            </div>
             
             <div className="mt-auto flex justify-end space-x-2 space-x-reverse">
               <button
@@ -1348,70 +1373,6 @@ export default function AdminProducts() {
                 </div>
               </div>
 
-              <div>
-                <label
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  الفئات
-                </label>
-                
-                                  <div className="mt-1 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-300 rounded-md">
-                    {categories.map((category) => (
-                      <div key={category.id} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          id={`category-${category.id}`}
-                          checked={formData.selectedCategories.includes(category.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                selectedCategories: [...formData.selectedCategories, category.id]
-                              });
-                            } else {
-                              setFormData({
-                                ...formData,
-                                selectedCategories: formData.selectedCategories.filter(id => id !== category.id)
-                              });
-                            }
-                          }}
-                          className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                        />
-                        <label
-                          htmlFor={`category-${category.id}`}
-                          className="mr-2 flex items-center"
-                        >
-                          <div
-                            className="w-3 h-3 rounded-full mr-1"
-                            style={{ backgroundColor: category.color || '#cccccc' }}
-                          ></div>
-                          <span className="text-sm">{category.name}</span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* عرض فئات المنتج بشكل واضح - تشخيص */}
-                  {formData.selectedCategories && formData.selectedCategories.length > 0 && (
-                    <div className="mt-2 p-2 border border-blue-200 bg-blue-50 rounded-md">
-                      <h4 className="text-sm text-blue-700 font-medium mb-1">الفئات المحددة:</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {formData.selectedCategories.map(categoryId => {
-                          const category = categories.find(c => c.id === categoryId);
-                          return category ? (
-                            <span key={categoryId} className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
-                              {category.name}
-                            </span>
-                          ) : (
-                            <span key={categoryId} className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">
-                              فئة غير معروفة: {categoryId}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
             </form>
             
             <div className="flex justify-end gap-2 mt-6">

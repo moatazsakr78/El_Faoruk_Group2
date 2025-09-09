@@ -43,7 +43,6 @@ export interface CompleteOrder {
  */
 async function ensureTablesExist(): Promise<boolean> {
   try {
-    console.log('Verificando si las tablas orders y order_items existen...');
     
     // Primero intentamos insertar en orders para ver si la tabla existe
     const { error: ordersTestError } = await supabase
@@ -53,7 +52,6 @@ async function ensureTablesExist(): Promise<boolean> {
     
     // Si hay un error, la tabla probablemente no existe, así que la creamos
     if (ordersTestError && ordersTestError.code === '42P01') {
-      console.log('Creando tabla orders...');
       
       try {
         // Crear la tabla orders directamente usando SQL 
@@ -111,7 +109,6 @@ async function ensureTablesExist(): Promise<boolean> {
     
     // Si hay un error, la tabla probablemente no existe, así que la creamos
     if (itemsTestError && itemsTestError.code === '42P01') {
-      console.log('Creando tabla order_items...');
       
       try {
         // Obtener un ID de orden existente para la relación
@@ -193,7 +190,6 @@ async function createOrderAlt(order: Order): Promise<{
   order_id?: string;
 }> {
   try {
-    console.log('Usando método alternativo para guardar la orden...');
     
     // Generar un ID único para la orden
     let orderId;
@@ -219,7 +215,6 @@ async function createOrderAlt(order: Order): Promise<{
       const orders = JSON.parse(localStorage.getItem('orders') || '[]');
       orders.push(orderData);
       localStorage.setItem('orders', JSON.stringify(orders));
-      console.log('Orden guardada en localStorage:', orderId);
     }
     
     return {
@@ -247,8 +242,6 @@ export async function createOrder(order: Order): Promise<{
   order_id?: string;
 }> {
   try {
-    console.log('=== INICIANDO CREACIÓN DE ORDEN ===');
-    console.log('Datos de orden recibidos:', JSON.stringify(order, null, 2));
     
     // Verificar si las tablas necesarias están disponibles
     try {
@@ -280,7 +273,6 @@ export async function createOrder(order: Order): Promise<{
       order.user_id = userId;
     }
     
-    console.log('Creating order for user:', userId);
     
     // Insertar la orden en la tabla orders
     const { data: orderData, error: orderError } = await supabase
@@ -310,7 +302,6 @@ export async function createOrder(order: Order): Promise<{
       };
     }
     
-    console.log('Order created successfully:', orderData);
     
     // Insertar los items de la orden
     const orderId = orderData.id;
@@ -332,7 +323,6 @@ export async function createOrder(order: Order): Promise<{
       };
     }
     
-    console.log('Order items created successfully');
     
     return {
       success: true,
@@ -358,7 +348,6 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
   order_id?: string;
 }> {
   try {
-    console.log('PASO 2: Insertando items para orden con ID:', orderId);
     
     // Preparar los items de la orden con el ID obtenido - adaptado a la estructura actual
     const orderItems = order.items.map(item => {
@@ -380,16 +369,6 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
       };
     });
 
-    console.log(`Preparados ${orderItems.length} items para inserción:`, 
-                JSON.stringify(orderItems.map(i => ({ 
-                  product_id: i.product_id,
-                  product_name: i.product_name,
-                  product_code: i.product_code,
-                  quantity: i.quantity,
-                  unit_price: i.unit_price,
-                  total_price: i.total_price,
-                  note: i.note
-                })), null, 2));
 
     // Insertar los items en la tabla order_items
     const { data: itemsResult, error: itemsError } = await supabase
@@ -401,7 +380,6 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
       console.error('ERROR al crear los items de la orden:', itemsError);
       
       // Eliminar la orden ya que los items fallaron
-      console.log('Eliminando orden fallida con ID:', orderId);
       const { error: deleteError } = await supabase.from('orders').delete().eq('id', orderId);
       
       if (deleteError) {
@@ -414,7 +392,6 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
       };
     }
 
-    console.log(`Insertados ${itemsResult?.length || 0} items correctamente`);
     
     // Verificar que los items se hayan insertado correctamente
     const { data: orderWithItems, error: verifyError } = await supabase
@@ -441,7 +418,6 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
     if (verifyError) {
       console.error('ERROR al verificar la orden completa:', verifyError);
     } else {
-      console.log('Orden completa verificada:', JSON.stringify(orderWithItems, null, 2));
     }
     
     // Update the order total amount
@@ -455,10 +431,8 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
     if (updateError) {
       console.error('ERROR al actualizar el total de la orden:', updateError);
     } else {
-      console.log('Total de la orden actualizado a:', totalAmount);
     }
     
-    console.log('=== ORDEN CREADA EXITOSAMENTE ===');
     
     return {
       success: true,
@@ -469,7 +443,6 @@ async function insertOrderItems(order: Order, orderId: string): Promise<{
     console.error('ERROR al insertar los items de la orden:', error);
     
     // Eliminar la orden ya que los items fallaron
-    console.log('Eliminando orden fallida con ID:', orderId);
     await supabase.from('orders').delete().eq('id', orderId).catch(e => {
       console.error('ERROR adicional al eliminar la orden fallida:', e);
     });
@@ -505,7 +478,6 @@ async function enrichOrderItemsWithProductData(items: OrderItem[]): Promise<Orde
         .single();
       
       if (error || !product) {
-        console.log(`No product found with id ${item.product_id}, using default values`);
         enrichedItems.push({
           ...item,
           product_name: item.product_name || 'منتج غير معروف',
@@ -516,7 +488,6 @@ async function enrichOrderItemsWithProductData(items: OrderItem[]): Promise<Orde
         continue;
       }
       
-      console.log(`Found product details for ${item.product_id}:`, product);
       
       // Update item with product data
       const updatedItem = {
@@ -566,7 +537,6 @@ export async function getUserOrders(): Promise<{
 
     const userId = session.session.user.id;
 
-    console.log('Fetching orders for user:', userId);
 
     // Obtener todas las órdenes del usuario
     const { data: orders, error: ordersError } = await supabase
@@ -583,13 +553,11 @@ export async function getUserOrders(): Promise<{
       };
     }
 
-    console.log('Found orders:', orders);
 
     // Para cada orden, obtener sus items
     const ordersWithItems: Order[] = [];
     
     for (const order of orders) {
-      console.log(`Fetching items for order ${order.id}`);
       
       const { data: items, error: itemsError } = await supabase
         .from('order_items')
@@ -601,11 +569,9 @@ export async function getUserOrders(): Promise<{
         continue;
       }
 
-      console.log(`Found ${items?.length || 0} items for order ${order.id}:`, items);
 
       // Enrich items with product details
       const enrichedItems = await enrichOrderItemsWithProductData(items || []);
-      console.log('Enriched items with product details:', enrichedItems);
 
       ordersWithItems.push({
         ...order,
@@ -613,7 +579,6 @@ export async function getUserOrders(): Promise<{
       });
     }
 
-    console.log('Processed orders with items:', ordersWithItems);
 
     return {
       success: true,
@@ -639,7 +604,6 @@ export async function deleteOrder(orderId: string): Promise<{
   message: string;
 }> {
   try {
-    console.log('=== بدء حذف الطلب ===', orderId);
     
     // التحقق من وجود المستخدم المصادق عليه
     const { data: session } = await supabase.auth.getSession();
@@ -652,7 +616,6 @@ export async function deleteOrder(orderId: string): Promise<{
     }
 
     const userId = session.session.user.id;
-    console.log('Current user ID:', userId);
 
     // التحقق من أن الطلب ينتمي للمستخدم الحالي
     const { data: order, error: orderError } = await supabase
@@ -686,7 +649,6 @@ export async function deleteOrder(orderId: string): Promise<{
     }
 
     // حذف عناصر الطلب أولاً
-    console.log('Deleting order items for order:', orderId);
     const { data: deletedItems, error: itemsDeleteError } = await supabase
       .from('order_items')
       .delete()
@@ -701,10 +663,8 @@ export async function deleteOrder(orderId: string): Promise<{
       };
     }
     
-    console.log('Successfully deleted order items:', deletedItems?.length || 0, 'items');
 
     // حذف الطلب نفسه
-    console.log('Deleting order record:', orderId);
     const { data: deletedOrder, error: orderDeleteError } = await supabase
       .from('orders')
       .delete()
@@ -720,7 +680,6 @@ export async function deleteOrder(orderId: string): Promise<{
       };
     }
     
-    console.log('Successfully deleted order:', deletedOrder);
 
     return {
       success: true,
@@ -748,9 +707,6 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
   order_id?: string;
 }> {
   try {
-    console.log('=== بدء تحديث الطلب ===', orderId);
-    console.log('Order items to update:', JSON.stringify(orderItems, null, 2));
-    console.log('Order notes:', notes);
     
     // التحقق من وجود جلسة مستخدم
     const { data: session } = await supabase.auth.getSession();
@@ -763,7 +719,6 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
     }
 
     const userId = session.session.user.id;
-    console.log('Current user ID:', userId);
     
     // التحقق من أن الطلب ينتمي للمستخدم الحالي
     const { data: order, error: orderError } = await supabase
@@ -789,7 +744,6 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
     }
 
     // حذف عناصر الطلب الحالية
-    console.log('Deleting current order items for order:', orderId);
     const { error: deleteError } = await supabase
       .from('order_items')
       .delete()
@@ -802,7 +756,6 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
         message: 'فشل في تحديث الطلب: لا يمكن حذف العناصر القديمة'
       };
     }
-    console.log('Successfully deleted old order items');
 
     // إعداد العناصر الجديدة مع التأكد من وجود جميع الحقول
     const formattedItems = orderItems.map(item => {
@@ -827,10 +780,8 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
 
     // حساب المجموع الإجمالي
     const totalAmount = formattedItems.reduce((sum, item) => sum + item.total_price, 0);
-    console.log('Calculated total amount:', totalAmount);
 
     // تحديث الطلب الرئيسي مع إضافة ملاحظات الطلب
-    console.log('Updating main order record with notes');
     const { data: updatedOrder, error: updateOrderError } = await supabase
       .from('orders')
       .update({
@@ -849,9 +800,7 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
         message: 'فشل في تحديث معلومات الطلب'
       };
     }
-    console.log('Successfully updated order:', updatedOrder);
 
-    console.log('Formatted items to insert:', JSON.stringify(formattedItems, null, 2));
 
     // إضافة عناصر الطلب الجديدة
     const { data: insertedItems, error: insertError } = await supabase
@@ -867,7 +816,6 @@ export async function updateOrder(orderId: string, orderItems: OrderItem[], note
       };
     }
 
-    console.log('Successfully inserted new order items:', insertedItems?.length || 0, 'items');
     
     return {
       success: true,

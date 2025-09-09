@@ -134,11 +134,6 @@ function ProductGrid({
           processedProducts = processedProducts.slice(0, limit);
         }
         
-        console.log('Products loaded:', {
-          total: processedProducts.length,
-          initial: INITIAL_PRODUCTS_COUNT,
-          hasMore: processedProducts.length > INITIAL_PRODUCTS_COUNT
-        });
         
         // تعيين كل المنتجات
         setAllProducts(processedProducts);
@@ -150,7 +145,6 @@ function ProductGrid({
         
         // تحديد ما إذا كان هناك المزيد من المنتجات للتحميل
         const shouldHaveMore = processedProducts.length > INITIAL_PRODUCTS_COUNT;
-        console.log('Setting hasMore:', { shouldHaveMore, totalProducts: processedProducts.length, initialCount: INITIAL_PRODUCTS_COUNT });
         setHasMore(shouldHaveMore);
         
         // إعادة تعيين رقم الصفحة
@@ -238,16 +232,9 @@ function ProductGrid({
   // دالة بسيطة لتحميل المزيد من المنتجات
   const loadMoreProducts = useCallback(() => {
     if (loadingMore || !hasMore || updateInProgressRef.current || !isMountedRef.current) {
-      console.log('LoadMore blocked:', { 
-        loadingMore, 
-        hasMore, 
-        updateInProgress: updateInProgressRef.current,
-        isMounted: isMountedRef.current 
-      });
       return;
     }
     
-    console.log('Starting loadMoreProducts...');
     setLoadingMore(true);
     
     // استخدام requestAnimationFrame بدلاً من setTimeout لتحسين الأداء
@@ -261,20 +248,12 @@ function ProductGrid({
       const endIndex = startIndex + PRODUCTS_PER_PAGE;
       const newProducts = filteredProducts.slice(startIndex, endIndex);
       
-      console.log('LoadMore Debug:', {
-        startIndex,
-        endIndex,
-        newProductsCount: newProducts.length,
-        totalFiltered: filteredProducts.length,
-        currentVisible: currentVisibleCount
-      });
       
       if (newProducts.length > 0) {
         setVisibleProducts(prev => [...prev, ...newProducts]);
         setHasMore(endIndex < filteredProducts.length);
         setProductPage(prev => prev + 1);
       } else {
-        console.log('No more products to load');
         setHasMore(false);
       }
       
@@ -304,13 +283,6 @@ function ProductGrid({
     observerRef.current = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        console.log('Intersection Observer triggered:', {
-          isIntersecting: entry.isIntersecting,
-          hasMore,
-          loadingMore,
-          visibleCount: visibleProducts.length,
-          filteredCount: filteredProducts.length
-        });
         
         // التحقق من جميع الشروط قبل التحميل
         if (entry.isIntersecting && hasMore && !loadingMore && !updateInProgressRef.current) {

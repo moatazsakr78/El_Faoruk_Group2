@@ -38,13 +38,6 @@ function ProductCard({ product, priority = false }: ProductCardProps) {
   // الحصول على صلاحية المستخدم (مع قيمة افتراضية 'customer')
   const userRole = profile?.role || 'customer';
   
-  // طباعة معلومات المستخدم للتصحيح بشكل مفصل
-  useEffect(() => {
-    console.log('ProductCard - User profile:', profile);
-    console.log('ProductCard - User role:', userRole);
-    console.log('ProductCard - Is admin:', isAdmin);
-    console.log('ProductCard - Product:', product.name, 'Code:', product.productCode);
-  }, [profile, userRole, isAdmin, product]);
   
   // Reset UI states when order mode changes
   useEffect(() => {
@@ -94,17 +87,15 @@ function ProductCard({ product, priority = false }: ProductCardProps) {
         const cachedResponse = await cache.match(product.imageUrl);
         
         if (cachedResponse) {
-          console.log('Image found in cache:', product.imageUrl);
+          // Image found in cache
         } else {
           // إذا لم تكن الصورة في cache، قم بتخزينها
           await cache.add(product.imageUrl);
-          console.log('Image added to cache:', product.imageUrl);
         }
         
         // تعيين مصدر الصورة بعد التحقق من cache
         setImageState(prev => ({ ...prev, src: product.imageUrl }));
       } catch (error) {
-        console.error('Error with cache:', error);
         // في حالة الخطأ، استخدم الرابط المباشر
         setImageState(prev => ({ ...prev, src: product.imageUrl }));
       }
@@ -217,15 +208,12 @@ function ProductCard({ product, priority = false }: ProductCardProps) {
   let showPiecePrice = false;
   let showWholesalePrice = false;
 
-  // طباعة معلومات الصلاحيات للتصحيح بشكل مفصل
-  console.log(`Product ${product.productCode} - Role: ${userRole}, isAdmin: ${isAdmin}, Profile:`, profile);
 
   // تحسين منطق عرض الأسعار - استخدام تنفيذ أكثر مباشرة لمنع أي مشاكل
   if (isAdmin === true) {
     // المشرفون يرون جميع الأسعار
     showPiecePrice = true;
     showWholesalePrice = true;
-    console.log(`Admin user (is_admin=true) - showing both prices for product ${product.productCode}`);
   } else {
     // التعامل مع الصلاحيات المختلفة
     const role = userRole ? userRole.toLowerCase() : 'customer';
@@ -234,20 +222,16 @@ function ProductCard({ product, priority = false }: ProductCardProps) {
     if (role === 'wholesale') {
       showPiecePrice = false;
       showWholesalePrice = true;
-      console.log(`Wholesale user - showing only wholesale price for product ${product.productCode}`);
     } else if (role === 'preparation') {
       showPiecePrice = false;
       showWholesalePrice = false;
-      console.log(`Preparation user - hiding all prices for product ${product.productCode}`);
     } else if (role === 'full_details' || role === 'admin') {
       showPiecePrice = true;
       showWholesalePrice = true;
-      console.log(`${role} user - showing both prices for product ${product.productCode}`);
     } else {
       // الحالة الافتراضية (customer أو أي قيمة أخرى) - سعر القطعة فقط
       showPiecePrice = true;
       showWholesalePrice = false;
-      console.log(`Default case (role=${role}) - showing only piece price for product ${product.productCode}`);
     }
   }
 

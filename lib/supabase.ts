@@ -24,14 +24,14 @@ if (typeof window !== 'undefined') {
 function mapDatabaseToAppModel(product: any) {
   if (!product) return null;
   
-  // طباعة البيانات المستلمة من قاعدة البيانات للتشخيص
-  console.log('بيانات المنتج المستلمة من قاعدة البيانات:', {
-    id: product.id,
-    name: product.name,
-    product_code: product.product_code,
-    box_quantity: product.box_quantity,
-    piece_price: product.piece_price
-  });
+  // طباعة البيانات المستلمة من قاعدة البيانات للتشخيص (معطل لتقليل اللوغز)
+  // console.log('بيانات المنتج المستلمة من قاعدة البيانات:', {
+  //   id: product.id,
+  //   name: product.name,
+  //   product_code: product.product_code,
+  //   box_quantity: product.box_quantity,
+  //   piece_price: product.piece_price
+  // });
   
   // تعامل مع كلا الاسمين لحقل التاريخ (created_at و createdAt)
   const createdDate = product.created_at || product.createdAt || new Date().toISOString();
@@ -65,8 +65,8 @@ function mapDatabaseToAppModel(product: any) {
     categoryId: product.category_id
   };
   
-  // طباعة النتيجة بعد التحويل للتشخيص
-  console.log('بعد تحويل المنتج إلى نموذج التطبيق:', result);
+  // طباعة النتيجة بعد التحويل للتشخيص (معطل لتقليل اللوغز)
+  // console.log('بعد تحويل المنتج إلى نموذج التطبيق:', result);
   
   return result;
 }
@@ -75,7 +75,7 @@ function mapDatabaseToAppModel(product: any) {
 function mapAppModelToDatabase(product: any) {
   if (!product) return null;
   
-  console.log('تحويل المنتج:', product.id, 'createdAt:', product.createdAt);
+  // console.log('تحويل المنتج:', product.id, 'createdAt:', product.createdAt); // معطل لتقليل اللوغز
   
   // إنشاء نسخة من التاريخ بالصيغة المناسبة
   let formattedDate = product.createdAt;
@@ -112,8 +112,8 @@ function mapAppModelToDatabase(product: any) {
     category_id: product.categoryId
   };
   
-  // طباعة الناتج للتحقق
-  console.log('بعد التحويل:', result.id, 'created_at:', result.created_at, 'updated_at:', result.updated_at);
+  // طباعة الناتج للتحقق (معطل لتقليل اللوغز)
+  // console.log('بعد التحويل:', result.id, 'created_at:', result.created_at, 'updated_at:', result.updated_at);
   
   return result;
 }
@@ -338,8 +338,8 @@ export async function forceRefreshFromServer() {
     }
     
     // طباعة البيانات المستلمة من السيرفر للتشخيص
-    console.log('عينة من بيانات المنتجات من السيرفر:', productsData.slice(0, 2));
-    console.log('عينة من علاقات المنتجات بالفئات:', productCategoriesData?.slice(0, 5) || []);
+    // console.log('عينة من بيانات المنتجات من السيرفر:', productsData.slice(0, 2)); // معطل لتقليل اللوغز
+    // console.log('عينة من علاقات المنتجات بالفئات:', productCategoriesData?.slice(0, 5) || []); // معطل لتقليل اللوغز
     
     // تحويل البيانات إلى نموذج التطبيق مع التأكد من صحة القيم
     const transformedModels = productsData.map(item => {
@@ -351,8 +351,8 @@ export async function forceRefreshFromServer() {
       const categoryIds = productCategories.map(pc => pc.category_id);
       
       // طباعة نتيجة التحويل للتشخيص
-      console.log('نتيجة التحويل من قاعدة البيانات:', model);
-      console.log('فئات المنتج:', item.id, categoryIds);
+      // console.log('نتيجة التحويل من قاعدة البيانات:', model); // معطل لتقليل اللوغز
+      // console.log('فئات المنتج:', item.id, categoryIds); // معطل لتقليل اللوغز
       
       // التأكد من وجود جميع الحقول المطلوبة وبالأنواع الصحيحة
       const validatedModel = {
@@ -377,7 +377,7 @@ export async function forceRefreshFromServer() {
       };
       
       // طباعة النموذج النهائي المتحقق منه للتشخيص
-      console.log('النموذج النهائي بعد التحقق:', validatedModel);
+      // console.log('النموذج النهائي بعد التحقق:', validatedModel); // معطل لتقليل اللوغز
       
       return validatedModel;
     });
